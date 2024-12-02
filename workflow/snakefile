@@ -1,0 +1,37 @@
+rule all:
+    input:
+        "results/chemistry/complete.csv"
+
+rule vmin_to_csv:
+    """
+    rule for creating the charge difference output in orser to foind the smallest charge difference for each sample point
+    """
+    output:
+        "results/charge_difference/charge_dif_1.csv"
+    input: 
+        file = "results/vmin/split_1__0.05_1732485107.ou2",
+        script = "scripts/vmin_to_csv.r"
+    log: 
+        "logs/vmin_to_csv/r_log.log"
+    container: "oras://community.wave.seqera.io/library/r-glue_r-openxlsx_r-tidyverse:a8a3e3b40e853b0e"
+    shell:
+        """ 
+        Rscript scripts/vmin_to_csv.r >&{log}
+        """
+    
+rule all_data_aggregation: 
+    """
+    rule for combining the data in a new csv
+    """
+    output:
+        "results/chemistry/complete.csv" 
+    input: 
+        file = "results/charge_difference/charge_dif_1.csv",
+        script = "scripts/optimizing_cd.r"
+    log:
+        "logs/vmin_to_csv/r_all_log.log"
+    container: "oras://community.wave.seqera.io/library/r-glue_r-openxlsx_r-tidyverse:a8a3e3b40e853b0e"
+    shell:
+        """ 
+        Rscript scripts/optimizing_cd.r >&{log}
+        """

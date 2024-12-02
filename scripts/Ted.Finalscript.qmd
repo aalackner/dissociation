@@ -1,0 +1,1679 @@
+# Aggregating the data
+
+In the below chunk I load the data and give an example of how to aggregate some variables. Please go through your table of conversions and relevant variables to make sure they are all considered in the code, I didn't do this I just used some that I knew were there.
+
+In the first chunk we load the data and you caan see what all there is, in therms of names and existing data.
+
+## Example
+
+```{r}
+# load the tidyverse
+library(tidyverse)
+
+# load the dataset currently I am filtering only one station so that there is less samples to handle. remove the last %>% filter(...) to load the entire dataset
+#df <- read.csv("\\\\storage.slu.se\\Home$\\anlr0006\\My Documents\\04_Projects\\02_Top-Down\\01_data\\02_raw_data\\01_mvm_miljödata\\water_chem_2024_10_08.csv") 
+
+# My directory
+df <- read.csv("water_chem_2024_10_15.csv")%>% filter(mvm_id %in% mvm_ids) %>% mutate(sampling_date = as.Date(sampling_date))%>% select(-c("X", "...1"))
+
+# now we print all the names of the columns 
+print(names(df))
+
+
+# we can also print names which include certain criterias such as the string "Al"
+
+df %>% select(contains(c("Al"))) %>% names() %>% print()
+
+df %>% select(contains(c("SO4"))) %>% names() %>% print()
+
+# we printed also names that are not super relevant so maybe you want to exclude some such as printing names with Al but not with Alk or "halt"  (alkalinity or slamhalt)
+
+df %>% select(contains(c("Al")) & !contains(c("Alk", "halt")) ) %>% names() %>% print()
+
+## Now we create a table that shows us how many values are in each column
+
+
+df_New %>%
+  summarise(across(everything(), ~ sum(!is.na(.)))) %>%
+  pivot_longer(cols = everything(), names_to = "Column", values_to = "NA_Count") %>% print()
+
+## Maybe you want to know how many there are only for the column names you found before that deal with Aluminium:
+
+df %>% select(contains(c("Al")) & !contains(c("Alk", "halt")) )%>%
+  summarise(across(everything(), ~ sum(is.na(.)))) %>%
+  pivot_longer(cols = everything(), names_to = "Column", values_to = "NA_Count") %>% print()
+
+
+```
+
+Now in the second column we start to aggregate what we want to. Lets ignore all the \_M columns and generate new ones.
+
+```{r}
+
+# firstly lets keep a list for which variables we actually want at the end, this will later be used to select on the columns we care about. 
+keepers <- c("SO4_M", "TOC_mgl", "Fe_µgl", "Si_mgl" , "Al_µgl" , "K_mgl" , "Ca_mgl" , "NH4_N_µgl" , "Cl_mgl" , "DOC_mgl" , "Mg_mgl" , "Na_mgl" , "NO3_N_µgl" , "Abs_F420_5cm" , "Abs_F254_5cm" , "AlI" , "Alk_Acid_mekvl" , "OC_mgl")
+
+# Here is how you mutate the dataframe to calculate your variable. The general format is:  Wanted_variable = coalesce( First_option, Second_option, Third_option)
+df %>% mutate (
+    SO4_M = coalesce(# There are still some variables missing you need all these columns:"SO4_M"       "SO4_mgl.SO4" "SO4_mekvl"   "SO4_mgl"     "SO4_mgl.S"   "SO4_IC_mgl"  so just add them in.
+      (SO4_mekvl/2)/1000,
+      `SO4_IC_mgl` / ((32+ 4*16)*1000), 
+      NA_real_ ),
+    NO3_M = coalesce(
+      NO3_N_mgl/(14.01*1000),
+      (NO2_NO3_N_µgl.N)/(14.01*1000000),
+      (NO2_NO3_N_mgl)/(14.01*1000),
+    )
+    
+) %>% select(all_of(keepers)) -> df_new
+
+# Sub-sample for testing the code (new variables)
+df_sample <- df[1:100, ]
+```
+
+## Working code (Input Data creation)
+
+```{r}
+library(tidyverse)
+
+df <- read.csv("water_chem_2024_10_15.csv") %>% select(-c("X", "...1")) %>% mutate(sampling_date = as.Date(sampling_date))
+
+
+keepers <- c("SO4_mekvl", "TOC_mgl", "Fe_µgl", "Si_mgl" , "Al_µgl" , "K_mgl" , "Ca_mgl" , "NH4_N_mekvl" , "Cl_mekvl" , "DOC_mgl" , "Mg_mgl" , "Na_mekvl" , "NO3_N_mekvl" , "Abs_F420_5cm" , "Abs_F254_5cm" , "AlI" , "Alk_Acid_mekvl" , "OC_mgl", "sample_id", "mvm_id", "sampling_date", "year")
+
+df %>% mutate (
+  SO4_mekvl = coalesce(
+    # Sulfate into mol/l
+    SO4_IC_mekvl, # wrong conversion
+    SO4_mekvl, # wrong conversion
+    SO4_IC_mgl/(96.0626/2) ,
+    SO4_IC_mgl.SO4/(96.0626/2) ,
+    SO4_mgl.SO4/(96.0626/2),
+    SO4_mgl.S/(32.06/2) ,
+    SO4_mgl/(96.0626/2)),
+  TOC_mgl = coalesce(
+    #TOC into mg/l
+    TOC_mgl,
+    TOC_mgl.C),
+  Fe_µgl = coalesce(
+    # Ironb into µgl
+    (Fe_F_mgl)*1000,
+    (Fe_F_µgl),
+    (Fe_mgl)*1000,
+    (Fe_µgl)),
+  Si_mgl = coalesce(
+    # Silicon mg/l
+    (Si_F_mgl),
+    (Si_µgl)*0.001,
+    (Si_mgl)),
+  Al_µgl = coalesce(
+    # Aluminium  µg/l
+    (Al_F_µgl),
+    (Al_ICP_µgl),
+    (Al_ICPAES_µgl),
+    (Al_s_µgl),
+    (Al_µgl)),
+  NH4_N_mekvl = coalesce(
+    (NH4_N_mgl)/(14.0067),
+    (NH4_N_µgl)/(14.0067 * 1000),
+    (NH4_N_µgl.N)/(14.0067 *1000)),
+  Ca_mgl = coalesce(
+    (Ca_F_mgl),
+    ((Ca_mekvl)/2)*20.04,
+    (Ca_mgl)),
+  K_mgl = coalesce(
+    (K_F_mgl),
+    (K_mekvl)*39.1,
+    (K_mgl)),
+  Cl_mekvl = coalesce(
+    (Cl_mekvl),
+    (Cl_mgl/35.45)),
+  DOC_mgl = coalesce(
+    (DOC_mgl),
+    (DOC_mgl.C)),
+  OC_mgl = coalesce(
+    (DOC_mgl),
+    (DOC_mgl.C),
+    (TOC_mgl),
+    (TOC_mgl.C)),
+  Mg_mgl = coalesce(
+    (Mg_F_mgl),
+    (Mg_mekvl/2)*12.155,
+    (Mg_mgl)),
+  Na_mekvl = coalesce(
+    (Na_F_mgl/22.99),
+    (Na_mekvl),
+    (Na_mgl/22.99)),
+  NO3_N_mekvl = coalesce(
+    (NO2_NO3_N_µgl)/(14.0067 * 1000),
+    (NO2_NO3_N_mgl)/14.0067,
+    (NO2_NO3_N_µgl.N/(14.0067*1000)),
+    (NO3_N_µgl/(14.0067 * 1000)),
+    (NO3_N_mgl/ 14.0067)),
+  Abs_F420_5cm = coalesce(
+    Abs_F420_5cm),
+  Fluorid_mgl = coalesce(
+    Fluorid_mekvl*19,
+    Fluorid_mgl),
+  Alk_Acid_mekvl = case_when (
+    !is.na(Alk_Acid_mekvl)~ Alk_Acid_mekvl,
+    !is.na(Alk_Acid_mmoll)~ Alk_Acid_mmoll,
+    !is.na(Acid_mekvl)& Acid_mekvl != 0 ~ -Acid_mekvl,
+    !is.na(Alk_mg.HCO3l)~ Alk_mg.HCO3l /(61.02),
+    !is.na(Alk_mekvl)~ Alk_mekvl,
+    !is.na(Alk_mmoll)~ Alk_mmoll, TRUE~NA_real_),
+) -> df_new
+  
+ df_new %>% select(all_of(keepers)) -> df_new
+```
+
+correctred Ca molar mass = 40.08 Mg
+
+```{r}
+
+df %>% mutate(
+  # Sulfate into mol/L with origin column tracking
+  SO4_mol = coalesce(
+    SO4_IC_mekvl / 2 / 1000,  # Convert meq/L to mol/L for SO4
+    SO4_mekvl / 2 / 1000,     # Convert meq/L to mol/L for SO4
+    SO4_IC_mgl / (96.0626 * 1000), # Convert from mg/L to mol/L for SO4
+    SO4_IC_mgl.SO4 / (96.0626 * 1000), # Convert from mg/L to mol/L for SO4
+    SO4_mgl.SO4 / (96.0626 * 1000), # Convert from mg/L to mol/L for SO4
+    SO4_mgl.S / (32.06 * 1000), # Convert from mg/L to mol/L for SO4
+    SO4_mgl / (96.0626 * 1000)  # Convert from mg/L to mol/L for SO4
+  ),
+  SO4_origin = case_when(
+    !is.na(SO4_IC_mekvl) ~ "SO4_IC_mekvl",
+    !is.na(SO4_mekvl) ~ "SO4_mekvl",
+    !is.na(SO4_IC_mgl) ~ "SO4_IC_mgl",
+    !is.na(SO4_IC_mgl.SO4) ~ "SO4_IC_mgl.SO4",
+    !is.na(SO4_mgl.SO4) ~ "SO4_mgl.SO4",
+    !is.na(SO4_mgl.S) ~ "SO4_mgl.S",
+    !is.na(SO4_mgl) ~ "SO4_mgl",
+    TRUE ~ NA_character_
+  ),
+  
+  # TOC into mol/L (C: 12.011 g/mol)
+  TOC_mol = coalesce(TOC_mgl, TOC_mgl.C) / (12.011 * 1000),
+  TOC_origin = case_when(
+    !is.na(TOC_mgl) ~ "TOC_mgl",
+    !is.na(TOC_mgl.C) ~ "TOC_mgl.C",
+    TRUE ~ NA_character_
+  ),
+  
+  # Iron into mol/L (Fe: 55.845 g/mol)
+  Fe_mol = coalesce(
+    Fe_F_mgl /( 55.845 * 1000),   # Convert from mg/L to mol/L
+    Fe_F_µgl / (55.845 * 1000000),  # Convert from µg/L to mol/L
+    Fe_mgl / (55.845 * 1000),      # Convert from mg/L to mol/L
+    Fe_µgl / (55.845 * 1000000)     # Convert from µg/L to mol/L
+  ),
+  Fe_origin = case_when(
+    !is.na(Fe_F_mgl) ~ "Fe_F_mgl",
+    !is.na(Fe_F_µgl) ~ "Fe_F_µgl",
+    !is.na(Fe_mgl) ~ "Fe_mgl",
+    !is.na(Fe_µgl) ~ "Fe_µgl",
+    TRUE ~ NA_character_
+  ),
+  
+ # Silicon into mol/L (Si: 28.085 g/mol)
+  Si_mol = case_when(
+    !is.na(Si_F_mgl) ~ Si_F_mgl / (28.085 * 1000),      # Convert from mg/L to mol/L
+    !is.na(Si_µgl) ~ Si_µgl / (28.085 * 1000000),       # Convert from µg/L to mol/L
+    !is.na(Si_mgl) ~ Si_mgl / (28.085 * 1000),          # Convert from mg/L to mol/L
+    TRUE ~ 0.1 / 1000                                   # Default value if all are NA
+  ),
+  Si_origin = case_when(
+    !is.na(Si_F_mgl) ~ "Si_F_mgl",
+    !is.na(Si_µgl) ~ "Si_µgl",
+    !is.na(Si_mgl) ~ "Si_mgl",
+    TRUE ~ NA_character_
+  ),
+  
+  # Aluminium into mol/L (Al: 26.9815 g/mol)
+  Al_mol = coalesce(
+    Al_F_µgl / (26.9815 * 1000000),   # Convert from µg/L to mol/L
+    Al_ICP_µgl / (26.9815 * 1000000), # Convert from µg/L to mol/L
+    Al_ICPAES_µgl / (26.9815 * 1000000), # Convert from µg/L to mol/L
+    Al_s_µgl / (26.9815 * 1000000),   # Convert from µg/L to mol/L
+    Al_µgl / (26.9815 * 1000000)      # Convert from µg/L to mol/L
+  ),
+  Al_origin = case_when(
+    !is.na(Al_F_µgl) ~ "Al_F_µgl",
+    !is.na(Al_ICP_µgl) ~ "Al_ICP_µgl",
+    !is.na(Al_ICPAES_µgl) ~ "Al_ICPAES_µgl",
+    !is.na(Al_s_µgl) ~ "Al_s_µgl",
+    !is.na(Al_µgl) ~ "Al_µgl",
+    TRUE ~ NA_character_
+  ),
+  
+  # Ammonium (NH₄⁺) into mol/L (NH₄-N: 14.0067 g/mol)
+  NH4_N_mol = coalesce(
+    NH4_N_mgl / (14.0067 * 1000), # Convert from mg/L to mol/L
+    NH4_N_µgl / (14.0067 * 1000 * 1000), # Convert from µg/L to mol/L
+    NH4_N_µgl.N / (14.0067 * 1000 * 1000) # Convert from µg/L-N to mol/L
+  ),
+  NH4_origin = case_when(
+    !is.na(NH4_N_mgl) ~ "NH4_N_mgl",
+    !is.na(NH4_N_µgl) ~ "NH4_N_µgl",
+    !is.na(NH4_N_µgl.N) ~ "NH4_N_µgl.N",
+    TRUE ~ NA_character_
+  ),
+  
+  # Calcium into mol/L (Ca²⁺: 40.08 g/mol)
+  Ca_mol = coalesce(
+    Ca_F_mgl / (40.08 * 1000),          # Convert from mg/L to mol/L
+    (Ca_mekvl / 2) / 1000 ,    # Convert from meq/L to mol/L for Ca
+    Ca_mgl / (40.08 * 1000)            # Convert from mg/L to mol/L
+  ),
+  Ca_origin = case_when(
+    !is.na(Ca_F_mgl) ~ "Ca_F_mgl",
+    !is.na(Ca_mekvl) ~ "Ca_mekvl",
+    !is.na(Ca_mgl) ~ "Ca_mgl",
+    TRUE ~ NA_character_
+  ),
+  
+  # Potassium into mol/L (K: 39.1 g/mol)
+  K_mol = coalesce(
+    K_F_mgl / (39.1 * 1000),           # Convert from mg/L to mol/L
+    K_mekvl / 1000,           # Convert from meq/L to mol/L for K
+    K_mgl / (39.1 * 1000)              # Convert from mg/L to mol/L
+  ),
+  K_origin = case_when(
+    !is.na(K_F_mgl) ~ "K_F_mgl",
+    !is.na(K_mekvl) ~ "K_mekvl",
+    !is.na(K_mgl) ~ "K_mgl",
+    TRUE ~ NA_character_
+  ),
+  
+  # Chloride into mol/L (Cl⁻: 35.45 g/mol)
+  Cl_mol = coalesce(
+    Cl_mekvl / 1000,        # Convert from meq/L to mol/L for Cl
+    Cl_mgl / (35.45 * 1000)          # Convert from mg/L to mol/L for Cl
+  ),
+  Cl_origin = case_when(
+    !is.na(Cl_mekvl) ~ "Cl_mekvl",
+    !is.na(Cl_mgl) ~ "Cl_mgl",
+    TRUE ~ NA_character_
+  ),
+  
+  # DOC into mol/L (C: 12.011 g/mol)
+  DOC_mol = coalesce(DOC_mgl, DOC_mgl.C) / (12.011 * 1000),
+  DOC_origin = case_when(
+    !is.na(DOC_mgl) ~ "DOC_mgl",
+    !is.na(DOC_mgl.C) ~ "DOC_mgl.C",
+    TRUE ~ NA_character_
+  ),
+  
+  # Organic Carbon into mol/L (C: 12.011 g/mol)
+  OC_mol = coalesce(DOC_mgl, DOC_mgl.C, TOC_mgl, TOC_mgl.C) / (12.011 * 1000),
+  OC_origin = case_when(
+    !is.na(DOC_mgl) ~ "DOC_mgl",
+    !is.na(DOC_mgl.C) ~ "DOC_mgl.C",
+    !is.na(TOC_mgl) ~ "TOC_mgl",
+    !is.na(TOC_mgl.C) ~ "TOC_mgl.C",
+    TRUE ~ NA_character_
+  ),
+  NO3_N_mol = coalesce(
+    (NO2_NO3_N_µgl) / (14.0067 * 1000000),  # Convert µg/L to mol/L for NO3-N
+    (NO2_NO3_N_mgl) / (14.0067 * 1000),           # Convert mg/L to mol/L for NO3-N
+    (NO2_NO3_N_µgl.N) / (14.0067 * 1000000), # Convert µg/L to mol/L for NO3-N
+    (NO3_N_µgl) / (14.0067 * 1000000),      # Convert µg/L to mol/L for NO3-N
+    (NO3_N_mgl) / (14.0067 * 1000)                # Convert mg/L to mol/L for NO3-N
+  ),
+    NO3_origin = case_when(
+      !is.na(NO2_NO3_N_µgl) ~ "NO2_NO3_N_µgl",
+      !is.na(NO2_NO3_N_mgl) ~ "NO2_NO3_N_mgl",
+      !is.na(NO2_NO3_N_µgl.N) ~ "NO2_NO3_N_µgl.N",
+      !is.na(NO3_N_µgl) ~ "NO3_N_µgl",
+      !is.na(NO3_N_mgl) ~ "NO3_N_mgl",
+      TRUE ~ NA_character_
+  ),
+  Fluorid_mol = coalesce(
+      Fluorid_mekvl  / 1000,  # Convert from mEq/L to mol/L (Fluoride)
+      Fluorid_mgl / (19 * 1000)          # Convert from mg/L to mol/L (Fluoride)
+  ),
+  Fluorid_origin = case_when(
+      !is.na(Fluorid_mekvl) ~ "Fluorid_mekvl",
+      !is.na(Fluorid_mgl) ~ "Fluorid_mgl",
+      TRUE ~ NA_character_
+  ),
+  Alk_Acid_mol = case_when(
+      !is.na(Alk_Acid_mekvl) ~ Alk_Acid_mekvl / 1000,   # Convert from mEq/L to mol/L
+      !is.na(Alk_Acid_mmoll) ~ Alk_Acid_mmoll / 1000,     # Convert from mmol/L to mol/L
+      !is.na(Acid_mekvl) & Acid_mekvl != 0 ~ -Acid_mekvl / 1000,  # Convert from mEq/L to mol/L, with negative sign
+      !is.na(Alk_mg.HCO3l) ~ Alk_mg.HCO3l / (61.02 * 1000), # Convert from mg/L to mol/L (using molar mass of HCO3-: 61.02 g/mol)
+      !is.na(Alk_mekvl) ~ Alk_mekvl / 1000,                # Convert from mEq/L to mol/L
+      !is.na(Alk_mmoll) ~ Alk_mmoll / 1000,                # Convert from mmol/L to mol/L
+      TRUE ~ NA_real_
+  ),
+  Alk_Acid_origin = case_when(
+      !is.na(Alk_Acid_mekvl) ~ "Alk_Acid_mekvl",
+      !is.na(Alk_Acid_mmoll) ~ "Alk_Acid_mmoll",
+      !is.na(Acid_mekvl) & Acid_mekvl != 0 ~ "Acid_mekvl",
+      !is.na(Alk_mg.HCO3l) ~ "Alk_mg.HCO3l",
+      !is.na(Alk_mekvl) ~ "Alk_mekvl",
+      !is.na(Alk_mmoll) ~ "Alk_mmoll",
+      TRUE ~ NA_character_
+  ),
+    Na_mol = coalesce(
+      (Na_F_mgl / (22.99 * 1000)),           # Convert from mg/L (Na_F_mgl) to mol/L using molar mass of Na (22.99 g/mol)
+      (Na_mekvl / 1000),            # If Na_mekvl is available, convert from mEq/L to mol/L by dividing by 1000
+      (Na_mgl / (22.99* 1000) )             # Convert from mg/L (Na_mgl) to mol/L using molar mass of Na (22.99 g/mol)
+  ),
+  Na_origin = case_when(
+      !is.na(Na_F_mgl) ~ "Na_F_mgl",  # If Na_F_mgl is available, mark the origin as "Na_F_mgl"
+      !is.na(Na_mekvl) ~ "Na_mekvl",  # If Na_mekvl is available, mark the origin as "Na_mekvl"
+      !is.na(Na_mgl) ~ "Na_mgl",      # If Na_mgl is available, mark the origin as "Na_mgl"
+      TRUE ~ NA_character_            # If none of the above are available, return NA
+  ),
+  Mn_mol = coalesce(
+    Mn_F_mgl / (54.938 * 1000),      # Convert from mg/L to mol/L       # Convert from meq/L to mol/L (dividing by 2 for divalent ion)
+    Mn_mgl / (54.938*1000)                  # Convert from mg/L to mol/L
+  ),
+  Mn_origin = case_when(
+      !is.na(Mn_F_mgl) ~ "Mn_F_mgl",
+      !is.na(Mn_mgl) ~ "Mn_mgl",
+      TRUE ~ NA_character_
+  ),
+  Zn_mol = coalesce(
+    Zn_F_mgl / (65.38 * 1000),       # Convert from mg/L to mol/L          # Convert from meq/L to mol/L (dividing by 2 for divalent ion)
+    Zn_mgl / (65.38 * 1000)                   # Convert from mg/L to mol/L
+  ),
+  Zn_origin = case_when(
+      !is.na(Zn_F_mgl) ~ "Zn_F_mgl",
+      !is.na(Zn_mgl) ~ "Zn_mgl",
+      TRUE ~ NA_character_
+  ),
+  Cu_mol = coalesce(
+    Cu_F_mgl / (63.546 * 1000),      # Convert from mg/L to mol/L        # Convert from meq/L to mol/L (dividing by 2 for divalent ion)
+    Cu_mgl / (63.546 * 1000)                  # Convert from mg/L to mol/L
+  ),
+  Cu_origin = case_when(
+      !is.na(Cu_F_mgl) ~ "Cu_F_mgl",
+      !is.na(Cu_mgl) ~ "Cu_mgl",
+      TRUE ~ NA_character_
+  ),
+  # Magnesium into mol/L (Mg²⁺: 24.305 g/mol)
+  Mg_mol = coalesce(
+      Mg_F_mgl / (24.305 * 1000),          # Convert from mg/L to mol/L
+      (Mg_mekvl / 2) / 1000,               # Convert from meq/L to mol/L (accounting for +2 valence)
+      Mg_mgl / (24.305 * 1000)             # Convert from mg/L to mol/L
+  ),
+  
+  Mg_origin = case_when(
+      !is.na(Mg_F_mgl) ~ "Mg_F_mgl",
+      !is.na(Mg_mekvl) ~ "Mg_mekvl",
+      !is.na(Mg_mgl) ~ "Mg_mgl",
+      TRUE ~ NA_character_
+  )
+) -> df_new 
+
+```
+
+Now we filter for ones that have the variables which are required.
+```{r}
+data %>% left_join(df_new, by = join_by(sample_id, mvm_id, sampling_date)) %>% mutate(mvm_id = as_factor(mvm_id))%>% left_join(lowest_charge_diff_data, by = join_by(sample_id, mvm_id, sampling_date)) %>% select(where(~ !all(. == 0, na.rm = TRUE) & !all(is.na(.)))) -> joined
+
+data %>% left_join(df, by = join_by(sample_id, mvm_id, sampling_date)) %>% mutate(mvm_id = as_factor(mvm_id))%>% left_join(lowest_charge_diff_data, by = join_by(sample_id, mvm_id, sampling_date)) %>% select(where(~ !all(. == 0, na.rm = TRUE) & !all(is.na(.)))) -> joined_df
+
+joined %>% mutate(split = if_else(sampling_date >= as.Date("2016-01-01"), "Above Threshold", "Below Threshold")) %>% sumtable(., group = "split", group.test = TRUE,  digits = 3, title = "2016")
+```
+
+Notice: I use the sumtable function here. It's super useful and it makes it very straight forward to summarize data. Google it :)
+
+```{r}
+library(vtable)
+
+# Summary of all the data
+df_new %>% sumtable()
+
+#Columns that are required
+columns_to_check <- c("OC_mol", "SO4_mol", "Al_mol", "Na_mol", "K_mol", "Cl_mol", "Ca_mol", "NO3_N_mol", "Alk_Acid_mol")
+
+df_new %>% 
+  filter(if_all(all_of(columns_to_check), ~ !is.na(.))) -> df_all
+
+df_all %>% %>% write.csv("chemistry_complete.csv")
+
+
+df_all %>% 
+  sumtable(., title = "All modelling data")
+
+# Just to get an idea of how many samples are had acidity instead of alkalinity
+df_all %>% filter(Alk_Acid_mekvl <= 0) %>% sumtable()
+```
+
+# Visual Minteq input and outputs
+
+Chuck for creating input for visual minteq model
+
+```{r}
+# Here we add the alkalinity to cl and the acidity to na as during the titration NaOH or HCl are added. This is for modelling purposes
+df_all %>% mutate(Cl_alk_mol =case_when(
+      Alk_Acid_mol > 0 ~ Cl_mol + Alk_Acid_mol,  # If alk_acid is positive, add it to cl
+      TRUE ~ Cl_mol                         # Otherwise, keep cl unchanged
+    ),
+    # Creating na_alk based on the condition of alk_acid
+    Na_acid_mol = case_when(
+      Alk_Acid_mol < 0 ~ Na_mol + abs(Alk_Acid_mol),  # If alk_acid is negative, add its absolute value to na
+      TRUE ~ Na_mol                             # Otherwise, keep na unchanged
+    )
+  ) %>%
+  mutate(across(contains("mol"), ~ replace_na(., 0)))-> df_model
+
+# df_model %>% sumtable(., title = "Added alk acid to cl and na")
+
+# df_model %>% write.csv("chemistry_complete.csv")
+
+library(openxlsx)
+# 
+# write.xlsx(df_model, file = 'Charge_density_input_streams.xlsx')
+```
+
+Here I split the input into 5 different input files according to mvm_id: Split_1 contains the stations with the most amount of samples and Split 5 the stations with the least amount of samples.
+
+```{r}
+# Load and preprocess data
+input <- df_model %>% select(contains("mol"), sample_id, mvm_id, sampling_date)
+
+# Step 1: Calculate row counts per `mvm_id` and sort in descending order
+id_counts <- input %>%
+  count(mvm_id, sort = TRUE)
+
+# Step 2: Initialize an empty list to hold the split data frames
+df_splits <- vector("list", 5)
+max_rows <- 9000  # Maximum rows per data frame
+current_df <- tibble()  # Start with an empty tibble
+current_row_count <- 0  # Track the row count in the current data frame
+split_index <- 1  # Index for the list of split data frames
+
+# Step 3: Loop through each `mvm_id` in sorted order
+for (i in seq_len(nrow(id_counts))) {
+  mvm_id <- id_counts$mvm_id[i]
+  rows <- input %>% filter(mvm_id == !!mvm_id)
+  num_rows <- nrow(rows)
+
+  # Check if adding this `mvm_id` would exceed the row limit
+  if (current_row_count + num_rows > max_rows) {
+    # Save the current data frame to the list and start a new split
+    df_splits[[split_index]] <- current_df
+    split_index <- split_index + 1
+    current_df <- tibble()
+    current_row_count <- 0
+  }
+
+  # Add rows to the current data frame
+  current_df <- bind_rows(current_df, rows)
+  current_row_count <- current_row_count + num_rows
+
+  # Check if we reached the last allowed split
+  if (split_index > 5) {
+    warning("There are more rows than can fit in 5 data frames of 9,000 rows each.")
+    break
+  }
+}
+
+# Step 4: Save any remaining rows in `current_df` to the final split
+if (nrow(current_df) > 0 && split_index <= 5) {
+  df_splits[[split_index]] <- current_df
+}
+
+# Write each split to separate files, if needed
+lapply(seq_along(df_splits), function(i) {
+  if (!is.null(df_splits[[i]])) {
+    write.xlsx(df_splits[[i]], file = paste0("Charge_density_split_", i, ".xlsx"))
+  }
+})
+
+```
+## Output processing
+
+Collecting the results from the Visual Minteq modeling and putting them into the charge difference csvs that are on OneDrive
+
+
+```{r}
+library(openxlsx)
+library(tidyverse)
+library(glue)
+
+# Define the function
+process_split_data <- function(split_number, output_folder, tab_folder = "C:/sim/Anna/Output_Auto") {
+  
+  # List all files that match the specified pattern
+  list_files <- list.files(tab_folder, pattern = glue::glue("^split_{split_number}"), full.names = TRUE)
+  
+  # Read the corresponding Excel file
+  excel_file_path <- glue::glue("C:/sim/Anna/Charge_density_split_{split_number}.xlsx")
+  excel <- read.xlsx(excel_file_path) %>% select(sample_id, mvm_id)
+  
+  # Define the function to read tab-delimited files with a custom header
+  read_tab_with_custom_header <- function(file_path) {
+    header_data <- read_delim(file_path, delim = "\t", col_names = FALSE, n_max = 2, skip = 1)
+    combined_header <- paste0(as.character(header_data[1, ]))
+    
+    data <- read_delim(file_path, delim = "\t", col_names = combined_header, skip = 3) %>%
+      mutate(charge_diff = (`Sum of cations` - `Sum of anions`) / (`Sum of cations` + `Sum of anions`) * 100) %>%
+      select(charge_diff)
+    
+    return(data)
+  }
+  
+  # Extract the adom.doc value (after __)
+  adom_docs <- str_extract(list_files, "__(.*)") %>%
+    str_remove_all("__") %>%
+    str_remove("_.*")
+  
+  # Initialize an empty list to store data frames
+  data_frames <- list()
+  
+  # Read in each file, modify column names, and store in the list
+  for (i in seq_along(list_files)) {
+    file_path <- list_files[i]
+    df <- read_tab_with_custom_header(file_path)
+    
+    # Debugging: print the data frame and the adom_doc
+    print(glue("Data frame from file: {basename(file_path)}"))
+    print(df)
+    
+    # Rename the column to include the adom.doc value
+    colnames(df) <- paste(colnames(df), adom_docs[i], sep = "_")
+    
+    # Add the data frame to the list
+    data_frames[[i]] <- df
+  }
+  
+  # Combine all data frames by columns
+  final_data <- bind_cols(data_frames) %>% bind_cols(excel)
+  
+  # Create output file name and save the final data frame as a CSV file
+  output_file_name <- glue::glue("{output_folder}/charge_dif_{split_number}.csv")
+  write.csv(final_data, output_file_name, row.names = FALSE)
+  
+  # Return the final data frame (optional)
+  return(final_data)
+}
+
+# Example of how to call the function
+# process_split_data(split_number = 5, output_folder = "C:/sim/Anna/Output")
+
+
+# Example of how to call the function
+process_split_data(split_number = 1, output_folder = "C:/sim/Anna/Charge_difference")
+process_split_data(split_number = 5, output_folder = "C:/sim/Anna/Charge_difference")
+process_split_data(split_number = 2, output_folder = "C:/sim/Anna/Charge_difference")
+process_split_data(split_number = 3, output_folder = "C:/sim/Anna/Charge_difference")
+process_split_data(split_number = 4, output_folder = "C:/sim/Anna/Charge_difference")
+```
+
+# Plotting Absorbance trends
+
+using Claudia von Brömssen's R package used in Eklöf et al 2020, Brownification on Hold paper.
+
+You need to have the sourcecode file in the same folder as this rmd file. I use the NMD file to get to the station coordinates this is just because the graphs are more easily understood when one can plot them north to south.
+
+First we load alll the necessary things
+
+```{r}
+source("sourcecode_screening2024.R")
+
+coordinates <- read.csv("catch_landuse(NMD)_n1.csv") %>% select(mvm_id, stationName, stationCoordinateX, stationCoordinateY) %>% rename(lat = stationCoordinateX, long = stationCoordinateY)
+
+df_new %>% left_join(coordinates) %>% mutate(sampling_date = as.Date(sampling_date)) -> df_new
+
+```
+
+### sVISa
+
+This creates the sVISa proporation plot and the lasange plot that is behind it as well. It takes quite a while to run and also ends up taking upo a lot of space so yu can only ever really have one at a time.
+
+```{r}
+#Trend plot for sVISa
+
+df_new  %>%  mutate(sVISa = Abs_F420_5cm / TOC_mgl) %>% filter(!is.na(sVISa)) %>% # create sVISa and filter any variables where it does not exist
+  group_by(mvm_id) %>%  # group by mvm_id to remocve andy station where we don't have enough data points
+  filter(n() >= 50) %>%  
+  ungroup() %>%
+     select(mvm_id, sVISa, sampling_date,lat) %>% mutate(SiteID = as.factor(mvm_id))%>% pivot_longer(cols=c("sVISa")) %>% 
+    screeningmodeling(values=value,
+                    datevar = sampling_date, 
+                    link = "identity", 
+                    conf.type = "conf",
+                    conf.level=0.95,
+                    beep = FALSE, 
+                    tdist = FALSE,
+                    autocor = TRUE,
+                    mvm_id,
+                    lat,
+                    name) ->
+  trendplotdata_chemistry_sVISa
+
+
+
+trendplotdata_chemistry_sVISa %>%plot_proportions()+ ggtitle("sVISa")
+
+# trendplotdata_chemistry_sVISa%>%plot_screeningtrends(y_id = mvm_id, sorting = -lat) + ggtitle("sVISa")+ xlab(NULL)
+```
+
+```{r}
+#Trend plot for TOC concentrations
+
+df_coor  %>% filter(!is.na(TOC_mgl)) %>%
+    group_by(mvm_id) %>%  # group by mvm_id to remove andy station where we don't have enough data points
+    filter(n() >= 50) %>%  
+    ungroup() %>%
+     select(mvm_id, TOC_mgl, sampling_date,lat) %>% mutate(SiteID = as.factor(mvm_id))%>% pivot_longer(cols=c("TOC_mgl")) %>% 
+    screeningmodeling(values=value,
+                    datevar = sampling_date, 
+                    link = "identity", 
+                    conf.type = "conf",
+                    conf.level=0.95,
+                    beep = FALSE, 
+                    tdist = FALSE,
+                    autocor = TRUE,
+                    mvm_id,
+                    lat,
+                    name) ->
+  trendplotdata_chemistry_TOC
+
+trendplotdata_chemistry_TOC%>%plot_proportions()+ ggtitle("TOC")
+
+trendplotdata_chemistry_TOC%>%plot_screeningtrends(y_id = mvm_id, sorting = -lat) + ggtitle("TOC")+ xlab(NULL)
+```
+
+# Period splitting example
+
+```{r}
+
+# lets say we want to look at two periods before 2010 and after:
+
+df_all %>% mutate(
+  period = case_when(
+      sampling_date < as.Date("2010-01-01") ~ "Before 2010",
+      sampling_date >= as.Date("2010-01-01") ~ "After 2010",
+      TRUE ~ NA_character_  # Handle any NA values if necessary
+    )
+  ) -> df_periods
+
+# get an overview
+df_periods %>% sumtable(., group = "period" )
+
+
+# if we want to know if there is a sig. difference (you should run the actual statistics but just to get an overview this is nice. Read the documentation to see what is behind it though)
+
+df_periods %>% sumtable(., group = "period", group.test = TRUE)
+
+```
+
+# Charge difference
+
+First we have to load the data, it is stored in 5 different csvs. They are on OneDrive. I only use one of the five csvs but we will need to include all.
+
+```{r}
+library(tidyverse)
+library(vtable)
+# load the data
+
+# data <- read.csv("C:/sim/Anna/Charge_difference/old/charge_dif_1.csv") %>% mutate(sampling_date = as.Date(sampling_date))
+
+charge_diff_input <- c("C:/sim/Anna/Charge_difference/charge_dif_1.csv",
+                        "C:/sim/Anna/Charge_difference/charge_dif_2.csv",
+                        "C:/sim/Anna/Charge_difference/charge_dif_3.csv",
+                        "C:/sim/Anna/Charge_difference/charge_dif_4.csv",
+                        "C:/sim/Anna/Charge_difference/charge_dif_5.csv")
+
+
+# data <- read.csv("C:/sim/Anna/Charge_difference/charge_dif_2.csv") %>% left_join(df_all%>% select(sample_id, sampling_date))
+
+chemistry <- read.csv("chemistry_complete.csv") %>% select(-X)
+
+
+# Read and row bind all CSV files in charge_diff_input
+data <- lapply(charge_diff_input, read.csv) %>% 
+          bind_rows() %>%
+          left_join(chemistry %>% select(sample_id, sampling_date), by = "sample_id")
+
+# data %>% sumtable(.,title = "Original")
+
+data %>% sumtable(.,title = "All")
+```
+Lets summarize the samples we have
+```{r}
+
+coordinates <- read.csv("catch_landuse(NMD)_n1.csv") %>% select(mvm_id, stationName, stationCoordinateX, stationCoordinateY)
+# chemistry %>% left_join(coordinates) %>% mutate(sampling_date = as.Date(sampling_date)) -> chemistry
+
+
+# Step 1: Count rows for each mvm_id
+mvm_counts <- data %>%
+  group_by(mvm_id) %>%
+  summarise(row_count = n())
+
+# Step 2: Plot histogram of row counts
+ggplot(mvm_counts, aes(x = row_count)) +
+  geom_histogram(binwidth = 12, fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "Samples per station: 42 907 samples from 187 stations",
+       x = "Samples per station",
+       y = "Frequency") +
+  theme_minimal()
+
+chemistry %>% select(mvm_id) %>%
+  group_by(mvm_id) %>%
+  arrange(mvm_id) %>%       # Ensure data is ordered within each mvm_id (if needed)
+  slice(1) %>%             # Exclude the first row of each group
+  ungroup() %>% left_join(coordinates) %>% left_join(mvm_counts) -> stations
+```
+```{r}
+library(sf)
+
+# Step 1: Convert the data frame to an sf object using SWEREF 99 TM coordinates
+stations_sf <- st_as_sf(stations, coords = c("stationCoordinateX", "stationCoordinateY"), crs = 3006) # SWEREF 99 TM EPSG:3006
+
+# Step 2: Load a basemap of Sweden in the SWEREF 99 TM projection
+# Here, we use the 'rnaturalearth' package for a Sweden shapefile
+# install.packages("rnaturalearth")
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+# Get Sweden map and transform to SWEREF 99 TM
+sweden_map <- ne_countries(scale = "medium", country = "Sweden", returnclass = "sf") %>%
+  st_transform(crs = 3006)
+
+# Step 3: Plot Sweden map and stations
+map_189 <- ggplot(data = sweden_map) +
+  geom_sf(fill = "lightgray", color = "black") +  # Plot Sweden map
+  geom_sf(data = stations_sf, aes(color = row_count), size = 2, alpha = 0.7) +  # Plot stations, colored by row_count
+  scale_color_viridis_c(option = "plasma") +  # Use a color scale for row_count
+  labs(title = "",
+       color = "Row Count") +
+  theme_minimal() +
+  theme(legend.position = "right")
+
+map_189 
+
+ggsave("outputs/map_number_of_samples.png", plot = map_189, width = 4, height = 8, dpi = 400)
+
+```
+
+We can make a scatterplot, very busy
+
+```{r}
+library(tidyverse)
+
+
+# Function to calculate RMSE for each charge_diff column and plot all RMSE values
+scatter_plot <- function(data) {
+  # 1. Calculate RMSE for each charge_diff column and store results
+  rmse_values <- data %>%
+    select(starts_with("charge_diff_")) %>%
+    summarise(across(everything(), ~ sqrt(mean(.^2, na.rm = TRUE)), .names = "rmse_{col}")) %>%
+    pivot_longer(cols = everything(), names_to = "column", values_to = "rmse") %>%
+    mutate(adom_doc = as.numeric(str_replace(column, "rmse_charge_diff_", "")))  # Extract ADOM.DOC value
+  
+  # Print RMSE values as requested 
+  print(rmse_values)
+  
+  # 2. Reshape data for plotting
+  plot_data <- data %>%
+    pivot_longer(cols = starts_with("charge_diff_"), names_to = "adom_doc", values_to = "charge_diff") %>%
+    mutate(adom_doc = as.numeric(str_replace(adom_doc, "charge_diff_", "")))  # Extract ADOM.DOC value
+  
+  # 3. Plot charge_diff vs. ADOM.DOC with RMSE-based vertical lines
+  charge_diff_plot <- ggplot(plot_data, aes(x = adom_doc, y = charge_diff)) +
+    # Add vertical lines for each ADOM.DOC value, color-coded by RMSE
+    geom_vline(data = rmse_values, aes(xintercept = adom_doc, color = rmse), linewidth = 1) +
+    scale_color_gradient(low = "blue", high = "red", name = "RMSE") +   # Color scale for RMSE
+    labs(x = "ADOM.DOC Value", y = "Charge Difference", title = "Charge Difference vs ADOM.DOC with RMSE Lines") +
+    theme_minimal() +
+    theme(legend.position = "right")+
+    geom_point(alpha = 0.7, position = "jitter") +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "grey")  # Reference line at 0
+    
+
+  # 4. Return the plot only
+  return(charge_diff_plot)
+}
+
+# # Example usage with a data frame `df`
+# plot <- scatter_plot(data)
+# 
+# # Display the plot
+# plot
+
+scatter_plot(data)
+
+```
+
+or a violin plot where we also plot the rmse in order to show which one is the most minimal one.
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(stringr)
+
+scatter_violin_plot <- function(data, title = "Charge Difference vs ADOM.DOC (Violin Plot with RMSE Bars)") {
+  # 1. Calculate RMSE for each charge_diff column and store results
+  rmse_values <- data %>%
+    select(starts_with("charge_diff_")) %>%
+    summarise(across(everything(), ~ sqrt(mean(.^2, na.rm = TRUE)), .names = "rmse_{col}")) %>%
+    pivot_longer(cols = everything(), names_to = "column", values_to = "rmse") %>%
+    mutate(adom_doc = as.numeric(str_replace(column, "rmse_charge_diff_", "")))  # Extract ADOM.DOC value
+  
+  # 2. Reshape data for plotting
+  plot_data <- data %>%
+    pivot_longer(cols = starts_with("charge_diff_"), names_to = "adom_doc", values_to = "charge_diff") %>%
+    mutate(adom_doc = as.numeric(str_replace(adom_doc, "charge_diff_", "")))  # Extract ADOM.DOC value
+  
+  # 3. Calculate the median for each ADOM.DOC
+  median_values <- plot_data %>%
+    group_by(adom_doc) %>%
+    summarise(median_charge_diff = median(charge_diff, na.rm = TRUE), .groups = 'drop')
+
+  # 4. Identify the smallest median value and assign colors
+  min_median <- median_values$median_charge_diff[which.min(abs(median_values$median_charge_diff))]
+  min_median_adom_doc <- median_values %>% filter(median_charge_diff == min_median) %>% pull(adom_doc)
+  
+  # 5. Create a violin plot with custom outline colors
+  charge_diff_plot <- ggplot(plot_data, aes(x = factor(adom_doc), y = charge_diff)) +
+    geom_violin(aes(color = ifelse(adom_doc == min_median_adom_doc, "blue", "black")), 
+                 alpha = 0.7, draw_quantiles = c(0.5)) +  # Outline color based on median
+    geom_hline(yintercept = 0, linetype = "dashed", color = "grey") +          # Reference line at 0
+    labs(x = "ADOM.DOC Value", y = "Charge Difference", title = title) +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    
+    # 6. Add RMSE bars with color according to RMSE ranking
+    geom_col(data = rmse_values, aes(x = factor(adom_doc), y = rmse, fill = ifelse(rmse == min(rmse), "blue", "red")),  
+             alpha = 0.6, width = 0.5) +
+    scale_fill_identity() +  # Use the colors assigned in rmse_values
+
+    # 7. Ensure the RMSE bars are placed appropriately and adjust the y-axis
+    coord_cartesian(ylim = c(-20, max(plot_data$charge_diff, na.rm = TRUE))) # Maintain max y-limit for charge_diff
+
+  # 8. Return the plot only
+  return(charge_diff_plot)
+}
+
+# Example usage with a data frame `df`
+# scatter_violin_plot(data, title = "Charge Difference vs ADOM.DOC everything")
+
+scatter_violin_plot(data_fixed, title = "Charge Difference vs ADOM.DOC fixed")
+```
+
+or just the rmse error bars
+```{r}
+scatter_violin_plot <- function(data, title = "Charge Difference vs ADOM.DOC (Violin Plot with RMSE Bars)") {
+  # 1. Calculate RMSE for each charge_diff column and store results
+  rmse_values <- data %>%
+    select(starts_with("charge_diff_")) %>%
+    summarise(across(everything(), ~ sqrt(mean(.^2, na.rm = TRUE)), .names = "rmse_{col}")) %>%
+    pivot_longer(cols = everything(), names_to = "column", values_to = "rmse") %>%
+    mutate(adom_doc = as.numeric(str_replace(column, "rmse_charge_diff_", "")))  # Extract ADOM.DOC value
+  
+  # 2. Reshape data for plotting
+  plot_data <- data %>%
+    pivot_longer(cols = starts_with("charge_diff_"), names_to = "adom_doc", values_to = "charge_diff") %>%
+    mutate(adom_doc = as.numeric(str_replace(adom_doc, "charge_diff_", "")))  # Extract ADOM.DOC value
+  
+  # 3. Calculate the median for each ADOM.DOC
+  median_values <- plot_data %>%
+    group_by(adom_doc) %>%
+    summarise(median_charge_diff = median(charge_diff, na.rm = TRUE), .groups = 'drop')
+
+  # 4. Identify the smallest median value and assign colors
+  min_median <- median_values$median_charge_diff[which.min(abs(median_values$median_charge_diff))]
+  min_median_adom_doc <- median_values %>% filter(median_charge_diff == min_median) %>% pull(adom_doc)
+  
+  # 5. Create a violin plot with custom outline colors
+  charge_diff_plot <- ggplot(plot_data, aes(x = factor(adom_doc), y = charge_diff)) +
+    geom_violin(aes(color = ifelse(adom_doc == min_median_adom_doc, "blue", "black")), 
+                 alpha = 0.7, draw_quantiles = c(0.5)) +  # Outline color based on median
+    geom_hline(yintercept = 0, linetype = "dashed", color = "grey") +          # Reference line at 0
+    labs(x = "ADOM.DOC Value", y = "Charge Difference", title = title) +
+    theme_minimal() +
+    theme(legend.position = "none") +
+    
+    # 6. Add RMSE bars with color according to RMSE ranking
+    geom_col(data = rmse_values, aes(x = factor(adom_doc), y = rmse, fill = ifelse(rmse == min(rmse), "blue", "green")),  
+             alpha = 0.4, width = 0.5) +
+    scale_fill_identity() +  # Use the colors assigned in rmse_values
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+    geom_hline(yintercept = 0, color = "black")+
+    # 7. Ensure the RMSE bars are placed appropriately and adjust the y-axis
+    coord_cartesian(ylim = c(-20, max(plot_data$charge_diff, na.rm = TRUE))) # Maintain max y-limit for charge_diff 
+
+  # 8. Return the plot only
+  return(charge_diff_plot)
+}
+
+
+violin <- scatter_violin_plot(data, title = "Charge difference for sweep of ADOM/DOC")
+
+ggsave("outputs/violin_all.png", , plot = violin, width = 14, height = 8, dpi = 400)
+
+
+```
+
+
+now we can quickly have a look at what happens when we split the data by time
+
+```{r}
+library(cowplot)
+
+data_filtered <- data %>% select(-contains(c("0.", "3.")))
+
+p1 <- scatter_violin_plot(data_filtered %>%  filter(sampling_date < as.Date("1998-01-01")), title = "pre 1998: 1 821")
+p2 <- scatter_violin_plot(data_filtered %>% filter(sampling_date < as.Date("2010-01-01") & sampling_date >= as.Date("1998-01-01") ), title = "1998 - 2010: 15 062")
+p3 <- scatter_violin_plot(data_filtered %>% filter(sampling_date >= as.Date("2010-01-01")), title = "post 2010: 26 024")
+
+combined_plot <- plot_grid(p1, p2, p3, nrow = 3, align = 'v')
+combined_plot
+
+ggsave("outputs/violin_time.png", , plot = combined_plot, width = 14, height = 8, dpi = 400)
+```
+
+or we can have a look by stations
+
+```{r}
+p1 <- scatter_violin_plot(data_filtered %>% filter(mvm_id == 2074), title = "2074")
+p2 <- scatter_violin_plot(data_filtered %>% filter(mvm_id == 48), title = "48")
+p3 <- scatter_violin_plot(data_filtered %>% filter(mvm_id == 1329), title = "1329")
+p4 <- scatter_violin_plot(data_filtered %>% filter(mvm_id == 166), title = "166")
+
+combined_plot_station <- plot_grid(p1, p2, p3, p4, nrow = 4, align = 'v')
+combined_plot_station
+
+
+ggsave("outputs/violin_example_stations.png", , plot = combined_plot_station, width = 14, height = 8, dpi = 400)
+```
+
+```{r}
+# Function to create and print separate plots for each batch of 4 mvm_ids
+create_and_print_plots <- function(data) {
+  unique_mvm_ids <- unique(data$mvm_id)
+  num_ids <- length(unique_mvm_ids)
+
+  # Loop through unique mvm_ids and generate plots
+  for (i in seq(1, num_ids, by = 4)) {
+    # Select the current batch of mvm_ids
+    batch_ids <- unique_mvm_ids[i:min(i + 3, num_ids)]
+    
+    # Generate plots for each mvm_id in the batch
+    plots <- lapply(batch_ids, function(mvm) {
+      scatter_violin_plot(data %>% filter(mvm_id == mvm), title = as.character(mvm))
+    })
+
+    # Combine the plots into a single plot for this batch
+    combined_batch_plot <- plot_grid(plotlist = plots, nrow = 4, align = 'v')
+
+    # Print the combined plot for the current batch
+    print(combined_batch_plot)
+
+    # Optionally, you could save the plots to files here if needed
+    # ggsave(filename = paste0("plot_batch_", ceiling(i / 4), ".png"), plot = combined_batch_plot)
+  }
+}
+
+# Usage
+create_and_print_plots(data_filtered %>% filter(mvm_id %in% c(2090,  1817,  2091,  1656,  1815,  1655,  1821,  2072,   204,  1329,  1330,   206,   205,   197,  2085,    27,    48,   166,  2074,   590,   182)))
+```
+
+```{r}
+rmse_values <- data %>%
+    select(starts_with("charge_diff_")) %>%
+    summarise(across(everything(), ~ sqrt(mean(.^2, na.rm = TRUE)), .names = "rmse_{col}")) %>%
+    pivot_longer(cols = everything(), names_to = "column", values_to = "rmse") %>%
+    mutate(adom_doc = as.numeric(str_replace(column, "rmse_charge_diff_", "")))
+  # 2. Reshape data for plotting
+plot_data <- data %>%
+    pivot_longer(cols = starts_with("charge_diff_"), names_to = "adom_doc", values_to = "charge_diff") %>%
+    mutate(adom_doc = as.numeric(str_replace(adom_doc, "charge_diff_", "")))  %>% group_by(sample_id) %>% arrange(abs(charge_diff)) %>% slice(1) %>% ungroup()
+  
+hist_ch.diff <- ggplot(plot_data, aes(x = charge_diff)) +
+  geom_histogram(binwidth = 2, fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "Histogram of Charge Difference", 
+       x = "Charge Difference", 
+       y = "Frequency") +
+  theme_minimal()
+
+hist_adom <- ggplot(plot_data %>% filter(charge_diff < 0.5 & charge_diff > -0.5), aes(x = adom_doc)) +
+  geom_histogram(binwidth = 0.05, fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "Histogram of ADOM/DOC", 
+       x = "ADOM/DOC", 
+       y = "Frequency") +
+  theme_minimal()
+hist_adom
+hist_ch.diff
+
+ggsave("outputs/hist_adom_doc_0.5chd.png", , plot = hist_adom, width = 5, height = 4, dpi = 300)
+ggsave("outputs/hist_charge_diff.png", , plot = hist_ch.diff, width = 5, height = 4, dpi = 300)
+
+
+```
+filter the ones that have a charge difference > 0.5
+```{r}
+plot_data %>% filter(charge_diff >= 0.5 | charge_diff <= -0.5)
+
+hist_adom <- ggplot(plot_data %>% filter(charge_diff >= 0.5 | charge_diff <= -0.5) %>% mutate(mvm_id = as_factor(mvm_id)), aes(x = as.Date(sampling_date))) +
+  geom_histogram(aes(fill = mvm_id), color = "black", alpha = 0.7) +
+  labs(title = "Histogram of Time charge diff > 0.5", 
+       x = "Date", 
+       y = "Frequency") +
+  theme_minimal() +
+  theme(legend.position = "none")
+  
+
+hist_adom
+
+ggsave("outputs/hist_time_large_0.5.png", , plot = hist_adom, width = 5, height = 4, dpi = 300)
+```
+map of adom/doc
+```{r}
+plot_data %>% group_by(mvm_id) %>% 
+
+
+```
+
+
+Finding the optimum for each individual sample and the plotting the kernel density.
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# Assuming `data` is your dataframe and has columns `charge_diff_1.00`, `charge_diff_1.05`, `charge_diff_1.10`, and so on.
+
+# Function to calculate the lowest charge difference and plot KDE
+plot_lowest_charge_diff_kde <- function(data, title = "Histogram for ADOM.DOC with Lowest Charge Difference") {
+  # Step 1: Reshape the data to find the lowest charge_diff per row
+  long_data <- data %>%
+    pivot_longer(cols = starts_with("charge_diff_"), names_to = "adom_doc", values_to = "charge_diff") %>%
+    mutate(adom_doc = as.numeric(str_replace(adom_doc, "charge_diff_", "")))  # Extract ADOM.DOC value
+  
+  # Step 2: For each row, find the ADOM.DOC with the lowest charge_diff
+lowest_charge_diff_data <- long_data %>%
+    group_by(sample_id) %>%  # Group by each row
+    filter(charge_diff == min(abs(charge_diff), na.rm = TRUE)) %>%  # Find the lowest charge_diff
+    ungroup()  # Select the corresponding ADOM.DOC value
+
+  # Step 3: Plot the kernel density estimate for the ADOM.DOC values
+  lowest_charge_diff_data %>% mutate(mvm_id = as.factor(mvm_id)) %>% ggplot(aes(x = adom_doc)) +
+    geom_histogram(aes(fill = mvm_id, color = mvm_id), bins = 21, alpha = 0.5) +
+    labs(title = title ,
+         x = "ADOM.DOC Value", y = "Count") +
+    theme_minimal()
+}
+
+# Example usage with your data
+#plot_lowest_charge_diff_kde(data, title = "Old Data")
+plot_lowest_charge_diff_kde(data_fixed, title = "Fixed Data")
+```
+
+Maybe lets see if it had to do with how we coded the input file for visual minteq
+
+```{r}
+process_split_data <- function(split_number, output_folder, tab_folder = "C:/sim/Anna/Output_Auto") {
+  
+  # List all files that match the specified pattern, allowing for both underscore formats
+  list_files <- list.files(tab_folder, pattern = glue::glue("^split_{split_number}(_|__)?(\\d+\\.\\d+)?\\.ou2$"), full.names = TRUE)
+  
+  # Read the corresponding Excel file
+  excel_file_path <- glue::glue("C:/sim/Anna/Charge_density_split_{split_number}.xlsx")
+  excel <- read.xlsx(excel_file_path) %>% select(sample_id, mvm_id, sampling_date)
+  
+  # Define the function to read tab-delimited files with a custom header
+  read_tab_with_custom_header <- function(file_path) {
+    header_data <- read_delim(file_path, delim = "\t", col_names = FALSE, n_max = 2, skip = 1)
+    combined_header <- paste0(as.character(header_data[1, ]))
+    
+    data <- read_delim(file_path, delim = "\t", col_names = combined_header, skip = 3) %>%
+      mutate(charge_diff = abs((`Sum of cations` - `Sum of anions`) / (`Sum of cations` + `Sum of anions`)) * 100) %>%
+      select(charge_diff)
+    
+    return(data)
+  }
+  
+  # Extract the adom.doc value (allowing for both formats)
+  adom_docs <- str_extract(list_files, "split_\\d+(_|__)?(\\d+\\.\\d+)") %>%
+    str_remove_all("split_\\d+(_|__)?") %>%
+    str_remove("\\.ou2")  # Remove the file extension to get just the numeric part
+  
+  # Initialize an empty list to store data frames
+  data_frames <- list()
+  
+  # Read in each file, modify column names, and store in the list
+  for (i in seq_along(list_files)) {
+    file_path <- list_files[i]
+    df <- read_tab_with_custom_header(file_path)
+    
+    # Rename the column to include the adom_doc value
+    colnames(df) <- paste("charge_diff", adom_docs[i], sep = "_")
+    
+    # Add the data frame to the list
+    data_frames[[i]] <- df
+  }
+  
+  # Combine all data frames by columns
+  final_data <- bind_cols(data_frames) %>% bind_cols(excel)
+  
+  # Create output file name and save the final data frame as a CSV file
+  output_file_name <- glue::glue("{output_folder}/charge_dif_{split_number}.csv")
+  write.csv(final_data, output_file_name, row.names = FALSE)
+  
+  # Return the final data frame (optional)
+  return(final_data)
+}
+
+
+
+#process_split_data(split_number = 1, output_folder = "C:/sim/Anna/Charge_difference_VM", tab_folder = "C:/sim/Anna/Out_VM")
+
+
+# data_vm <- read.csv("C:/sim/Anna/Charge_difference_VM/charge_dif_1.csv") %>% mutate(sampling_date = as.Date(sampling_date))
+scatter_violin_plot(data_vm, title = "Charge Difference vs ADOM.DOC VM data")
+plot_lowest_charge_diff_kde(data_vm, title = "VM data lowest charge diff")
+```
+
+Lets have a look at the data to see what the charge differen
+
+```{r}
+library(vtable)
+
+data_fixed %>% left_join(df_model, by = join_by(sample_id, mvm_id, sampling_date)) %>% mutate(mvm_id = as_factor(mvm_id))%>% left_join(lowest_charge_diff_data, by = join_by(sample_id, mvm_id, sampling_date)) %>% select(where(~ !all(. == 0, na.rm = TRUE) & !all(is.na(.)))) %>% 
+  # calculate charge balance
+  mutate(
+    sum_cations_cb = K_mol + Ca_mol * 2 + Mg_mol * 2 + NH4_N_mol, 
+    sum_anions_cb = SO4_mol * 2 + NO3_N_mol + Cl_mol + Fluorid_mol, 
+    charge_diff_cb = sum_cations_cb - sum_anions_cb, 
+    TOC_charge_eq.g.C = charge_diff_cb / (TOC_mol *12.01)
+    )-> joined
+
+data %>% left_join(df, by = join_by(sample_id, mvm_id, sampling_date)) %>% mutate(mvm_id = as_factor(mvm_id))%>% left_join(lowest_charge_diff_data, by = join_by(sample_id, mvm_id, sampling_date)) %>% select(where(~ !all(. == 0, na.rm = TRUE) & !all(is.na(.)))) -> joined_df
+
+joined %>% mutate(split = if_else(sampling_date >= as.Date("2016-01-01"), "Above Threshold", "Below Threshold")) %>% sumtable(., group = "split", group.test = TRUE,  digits = 3, title = "2016")
+
+joined %>% mutate(split = if_else(charge_diff >= 10, "Above Threshold", "Below Threshold")) %>% select(contains(c("ori")), split) %>% sumtable(., group = "split", group.test = TRUE,  digits = 3, title = "Charge density > 10") 
+
+joined %>% mutate(split = if_else(charge_diff >= 1, "Above Threshold", "Below Threshold"))  %>% sumtable(., group = "split", group.test = TRUE,  digits = 3, title = "Charge density > 1") 
+
+joined_df %>% mutate(split = if_else(charge_diff >= 1, "Above Threshold", "Below Threshold")) %>% select(contains(c("Ca")), split) %>% sumtable(., group = "split", group.test = TRUE,  digits = 3, title = "Charge density > 1") 
+```
+
+Shiny plot to visualize the split of the two datasets based on mvm_id and time.
+
+
+# Server
+Prep
+```{r}
+# Data wrangling to prepare lowest_charge_diff_data
+lowest_charge_diff_data <- data_fixed %>%
+    pivot_longer(cols = starts_with("charge_diff_"), names_to = "adom_doc", values_to = "charge_diff") %>%
+    mutate(adom_doc = as.numeric(str_replace(adom_doc, "charge_diff_", ""))) %>%
+    group_by(sample_id) %>%
+    slice_min(abs(charge_diff), with_ties = FALSE) %>% # Keeps only one row per sample_id with minimum charge_diff
+    ungroup() %>%
+    mutate(mvm_id = as_factor(mvm_id))
+
+data_fixed %>% left_join(df_model, by = join_by(sample_id, mvm_id, sampling_date)) %>% mutate(mvm_id = as_factor(mvm_id))%>% left_join(lowest_charge_diff_data, by = join_by(sample_id, mvm_id, sampling_date)) %>% select(where(~ !all(. == 0, na.rm = TRUE) & !all(is.na(.)))) %>% 
+  # calculate charge balance
+  mutate(
+    sum_cations_cb = K_mol + Ca_mol * 2 + Mg_mol * 2 + NH4_N_mol, 
+    sum_anions_cb = SO4_mol * 2 + NO3_N_mol + Cl_mol + Fluorid_mol, 
+    charge_diff_cb = sum_cations_cb - sum_anions_cb, 
+    TOC_charge_eq.g.C = charge_diff_cb / (TOC_mol *12.01)
+    )-> joined
+
+names_cols <- names(joined%>% select(contains("mol"), -c(Cl_alk_mol, Na_acid_mol, OC_mol, DOC_mol))) %>% str_sub(., 1, str_length(.) - 4)
+```
+
+```{r}
+library(corrplot)
+joined  %>% filter(mvm_id == 1817) %>%select(contains("mol"), charge_diff) -> corr_plot_data
+
+corrplot(cor(corr_plot_data))
+
+# Load necessary libraries
+library(dplyr)
+library(corrplot)
+
+# Get unique mvm_ids
+mvm_ids <- unique(joined$mvm_id)
+
+# Loop through each mvm_id
+for (id in mvm_ids) {
+  # Filter data for the current mvm_id and select numeric columns
+  corr_plot_data <- joined %>%
+    filter(mvm_id == id) %>%
+    select(contains("mol"), charge_diff) %>%
+    select(where(is.numeric))  # Ensure only numeric columns
+  
+  # Calculate the correlation matrix
+  corr_matrix <- cor(corr_plot_data, use = "complete.obs")
+  
+  # Plot the correlation matrix with the mvm_id in the title
+  corrplot(corr_matrix,
+           title = paste("Correlation Matrix for MVM ID", id)  # Add title with mvm_id
+)  # Adjust margins for title
+}
+
+```
+
+
+
+```{r}
+# Load necessary libraries
+library(shiny)
+library(dplyr)
+library(plotly)
+library(stringr)
+library(lubridate)
+
+# Get the min and max dates for slider input limits
+min_date <- 1990
+max_date <- 2024
+
+# Shiny app UI
+ui <- fluidPage(
+  titlePanel("Density Plot of Charge Difference Split by Threshold"),
+  
+  fluidRow(
+    column(3,
+      sliderInput("threshold",
+                  "Threshold for Charge Difference:",
+                  min = 0,
+                  max = 40,
+                  value = 1,
+                  step = 0.1)
+    ),
+    
+    column(9,
+      plotlyOutput("densityPlot"),
+      #renderText("The above plot shows the histogram of ADOM_DOC calculated."),
+      plotlyOutput("dateHistogram"),
+      plotlyOutput("stackedHistogram1"),
+      plotlyOutput("stackedHistogram2"),
+  # Plot for the second time period
+    )
+  ),
+  fluidRow(
+    column(3,
+           # Date range selector for time-based filtering
+      sliderInput("date_threshold", 
+                     "Select Date to split for Time Comparison:", 
+                     min = min_date, 
+                     max = max_date, 
+                     step = 1,
+                     value = 2016)
+      ),
+    column(9,
+      plotlyOutput("timeStackedHistogram1"), # Plot for the first time period
+      plotlyOutput("timeStackedHistogram2")
+      )
+  ),
+  titlePanel("Time Series of Stations"),
+  fluidRow(
+    column(3,
+           # Date range selector for time-based filtering
+      selectInput("mvm_id", 
+            "Select MVM ID:", 
+            choices = mvm_ids,
+            selected = mvm_ids[2]),
+      selectInput("chem1", 
+            "Select parameter:", 
+            choices = names_cols,
+            selected = names_cols[1])
+      ),
+    column(9,
+      plotlyOutput("timeSeries1"), # Plot for the first time period
+      plotlyOutput("timeSeries2"),
+      plotlyOutput("timeSeries3")
+      )
+  )#,
+  #titlePanel("Tables of Stations"),
+  # fluidRow(
+  #   column(3,
+  #          # Date range selector for time-based filtering
+  #     selectInput("mvm_id_table", 
+  #           "Select MVM ID:", 
+  #           choices = mvm_ids,
+  #           selected = mvm_ids[2])
+  #     ),
+  #   column(9,
+  #     uiOutput("tableSummary")
+  #     )
+  # )
+)
+
+server <- function(input, output) {
+  # Render the summary table for the selected mvm_id and charge_diff threshold
+  # output$tableSummary <- renderUI({
+  #   # Filter data for the selected mvm_id
+  #   subset_data <- joined %>%
+  #     mutate(charge_diff_group = case_when(
+  #       charge_diff < 5 ~ paste("Below", input$threshold),
+  #       charge_diff >= 5 ~ paste("Above", input$threshold)
+  #     ))
+  #   
+  #   # Use vtable's sumtable function to create a summary table
+  #   HTML(subset_data %>%
+  #     sumtable(., group = "charge_diff_group", out = "kable"
+  #     ))
+  # })
+  
+
+    
+  
+  output$densityPlot <- renderPlotly({
+    # Split dataset based on threshold
+  subset1 <- lowest_charge_diff_data %>% filter(abs(charge_diff) < input$threshold)
+  subset2 <- lowest_charge_diff_data %>% filter(abs(charge_diff) >= input$threshold)
+    
+    # Calculate counts
+    count1 <- nrow(subset1)
+    count2 <- nrow(subset2)
+    
+    # Density plot for adom_doc
+    plot <- plot_ly() %>%
+      add_trace(
+        x = ~subset1$adom_doc,
+        type = "histogram",
+        histnorm = "percent",
+        name = paste("Charge Diff <", input$threshold, " (n =", count1, ")"),
+        opacity = 0.6,
+        xbins = list(start = 0.975, end = 2.025, size = 0.05)
+      ) %>%
+      add_trace(
+        x = ~subset2$adom_doc,
+        type = "histogram",
+        histnorm = "percent",
+        name = paste("Charge Diff >=", input$threshold, " (n =", count2, ")"),
+        opacity = 0.6,
+        xbins = list(start = 0.975, end = 2.025, size = 0.05)
+      ) %>%
+      layout(
+        title = "Density Plot of Charge Difference",
+        xaxis = list(title = "ADOM/DOC"),
+        yaxis = list(title = "Percent"),
+        barmode = "overlay",
+        legend = list(title = list(text = "Groups"))
+      )
+    
+    plot
+  })
+  
+  output$dateHistogram <- renderPlotly({
+    subset1 <- lowest_charge_diff_data %>% filter(abs(charge_diff) < input$threshold)
+    subset2 <- lowest_charge_diff_data %>% filter(abs(charge_diff) >= input$threshold)
+    # 
+    plot <- plot_ly() %>%
+      add_trace(
+        x = ~subset1$sampling_date,
+        type = "histogram",
+        name = paste("Charge Diff <", input$threshold),
+        opacity = 0.6
+      ) %>%
+      add_trace(
+        x = ~subset2$sampling_date,
+        type = "histogram",
+        name = paste("Charge Diff >=", input$threshold),
+        opacity = 0.6
+      ) %>%
+      layout(
+        title = "Histogram of Sampling Dates",
+        xaxis = list(title = "Sampling Date"),
+        yaxis = list(title = "Count"),
+        barmode = "overlay",
+        legend = list(title = list(text = "Groups"))
+      )
+    
+    plot
+  })
+
+  output$stackedHistogram1 <- renderPlotly({
+  subset1 <- lowest_charge_diff_data %>% filter(abs(charge_diff) < input$threshold)
+  subset2 <- lowest_charge_diff_data %>% filter(abs(charge_diff) >= input$threshold)
+    
+    plot <- plot_ly(
+      data = subset1, 
+      x = ~adom_doc, 
+      color = ~mvm_id, 
+      type = "histogram"
+      #histnorm = "percent"
+    ) %>%
+      layout(
+        title = paste("ADOM/DOC by MVM ID (Charge Diff <", input$threshold, ")"),
+        barmode = "stack",
+        xaxis = list(title = "ADOM/DOC"),
+        yaxis = list(title = "Count")
+      )
+    
+    plot
+  })
+  
+  output$stackedHistogram2 <- renderPlotly({
+  subset1 <- lowest_charge_diff_data %>% filter(abs(charge_diff) < input$threshold)
+  subset2 <- lowest_charge_diff_data %>% filter(abs(charge_diff) >= input$threshold)
+    
+    plot <- plot_ly(
+      data = subset2, 
+      x = ~adom_doc, 
+      color = ~mvm_id, 
+      type = "histogram"
+      #histnorm = "percent"
+    ) %>%
+      layout(
+        title = paste("ADOM/DOC by MVM ID (Charge Diff >=", input$threshold, ")"),
+        barmode = "stack",
+        xaxis = list(title = "ADOM/DOC"),
+        yaxis = list(title = "Count")
+      )
+    
+    plot
+  })
+  
+  # Stacked histogram for the first time period
+  output$timeStackedHistogram1 <- renderPlotly({
+    subset_time1 <- lowest_charge_diff_data  %>%
+      filter(sampling_date < as.Date(paste0(input$date_threshold, "-01-01")))
+
+    plot <- plot_ly(
+      data = subset_time1,
+      x = ~charge_diff,
+      color = ~mvm_id,
+      type = "histogram",
+      histnorm = "percent"
+    ) %>%
+      layout(
+        title = paste("Min Charge diff by MVM ID for Time before ", input$date_threshold),
+        barmode = "stack",
+        xaxis = list(title = "Charge Difference"),
+        yaxis = list(title = "Percent")
+      )
+
+    plot
+  })
+
+  # Stacked histogram for the second time period
+  output$timeStackedHistogram2 <- renderPlotly({
+    subset_time2 <- lowest_charge_diff_data %>%
+      filter(sampling_date >= as.Date(paste0(input$date_threshold, "-01-01")))
+
+    plot <- plot_ly(
+      data = subset_time2,
+      x = ~charge_diff,
+      color = ~mvm_id,
+      type = "histogram",
+      histnorm = "percent"
+    ) %>%
+      layout(
+        title = paste("Min Charge diff by MVM ID for Time after ", input$date_threshold),
+        barmode = "stack",
+        xaxis = list(title = "Charge difference"),
+        yaxis = list(title = "Percent")
+      )
+
+    plot
+  })
+  
+output$timeSeries1 <- renderPlotly({
+  # Filter data for the specified mvm_id
+  subset_1817 <- joined %>%
+    filter(mvm_id == input$mvm_id) %>% arrange(sampling_date) %>% mutate(SO4_origin = as_factor(SO4_origin)) %>% mutate(NH4_N_origin = NH4_origin, NO3_N_origin = NO3_origin)
+  
+  # Time series plot for charge_diff over sampling_date
+  # Time series plot with two traces: charge_diff and SO4_mol on secondary y-axis
+  plot <- plot_ly(data = subset_1817) %>%
+    add_trace(
+      x = ~sampling_date,
+      y = ~charge_diff,
+      type = "scatter",
+      mode = "lines+markers",
+      name = "Charge Difference",
+      yaxis = "y"  # Primary y-axis
+    ) %>%
+    add_trace(
+      x = ~sampling_date,
+      y = ~SO4_mol,
+      type = "scatter",
+      mode = "lines+markers",
+      name = "SO4 Mole",
+      color = ~SO4_origin,  
+      yaxis = "y2",
+      text = ~paste("SO4 Mole:", SO4_mol, "<br>Origin:", SO4_origin),
+      hoverinfo = "text"  # Display the custom hover text
+    ) %>%
+     layout(
+      title = "Time Series of Charge Difference and SO4 Mole for MVM ID 1817",
+      xaxis = list(title = "Sampling Date"),
+      yaxis = list(title = "Charge Difference", side = "left"),
+      yaxis2 = list(
+        title = "SO4 Mole",
+        overlaying = "y",
+        side = "right"
+      ),
+      legend = list(title = list(text = "SO4 Origin"))
+    )
+  
+  plot
+})
+
+output$timeSeries3 <- renderPlotly({
+  # Filter data for the specified mvm_id
+  subset_1817 <- joined %>%
+    filter(mvm_id == input$mvm_id) %>% arrange(sampling_date) %>% mutate(across(contains("origin"), as_factor))%>% mutate(NH4_N_origin = NH4_origin)
+  
+  
+  # Time series plot with two traces: charge_diff and SO4_mol on secondary y-axis
+  plot <- plot_ly(data = subset_1817) %>%
+    add_trace(
+      x = ~sampling_date,
+      y = ~sum_cations_cb,
+      type = "scatter",
+      mode = "lines+markers",
+      name = "Sum Cations",
+      yaxis = "y"  # Primary y-axis
+    ) %>%
+    # Secondary y-axis trace for the selected chemical (chem1) with color mapped to chem1_origin
+    add_trace(
+      x = ~sampling_date,
+      y = ~sum_anions_cb,  # Dynamically use the selected chemical column (_mol)
+      type = "scatter",
+      mode = "lines+markers",
+      name = "Sum Anions", # Dynamically use the selected origin column (_origin)
+      yaxis = "y"  # Display the custom hover text
+    ) %>%
+    add_trace(
+      x = ~sampling_date,
+      y = ~TOC_charge_eq.g.C,  # Dynamically use the selected chemical column (_mol)
+      type = "scatter",
+      mode = "lines+markers",
+      name = "charge / g Carbon", # Dynamically use the selected origin column (_origin)
+      yaxis = "y2"  # Display the custom hover text
+    ) %>%
+    layout(
+      title = paste("Time Series of Charge Balance"),
+      xaxis = list(title = "Sampling Date"),
+      yaxis = list(title = "Moles", side = "left"),
+      yaxis2 = list(
+        title = paste("charge_diff / TOC"),
+        overlaying = "y",
+        side = "right"
+      ),
+      legend = list(title = list(text = paste(input$chem1, "Origin")))
+    )
+  
+  plot
+})
+
+output$timeSeries2 <- renderPlotly({
+  # Filter data for the specified mvm_id
+  subset_1817 <- joined %>%
+    filter(mvm_id == input$mvm_id) %>% arrange(sampling_date) %>% mutate(across(contains("origin"), as_factor))%>% mutate(NH4_N_origin = NH4_origin)
+  
+
+  # Determine the appropriate column names based on input$chem1
+  chem_col <- paste0(input$chem1, "_mol")    # e.g., "SO4_mol", "Al_mol", "Si_mol"
+  chem_origin_col <- paste0(input$chem1, "_origin")
+  
+  # Time series plot with two traces: charge_diff and SO4_mol on secondary y-axis
+  plot <- plot_ly(data = subset_1817) %>%
+    add_trace(
+      x = ~sampling_date,
+      y = ~charge_diff,
+      type = "scatter",
+      mode = "lines+markers",
+      name = "Charge Difference",
+      yaxis = "y"  # Primary y-axis
+    ) %>%
+    # Secondary y-axis trace for the selected chemical (chem1) with color mapped to chem1_origin
+    add_trace(
+      x = ~sampling_date,
+      y = ~get(chem_col),  # Dynamically use the selected chemical column (_mol)
+      type = "scatter",
+      mode = "lines+markers",
+      name = paste(input$chem1, "Mole"),
+      color = ~get(chem_origin_col),  # Dynamically use the selected origin column (_origin)
+      yaxis = "y2",
+      text = ~paste(input$chem1, "Mole:", get(chem_col), 
+              "<br>Origin:", get(chem_origin_col), 
+              "<br>Time:", sampling_date),
+      hoverinfo = "text"  # Display the custom hover text
+    ) %>%
+    layout(
+      title = paste("Time Series of Charge Difference and", input$chem1, "Mole for MVM ID", input$mvm_id),
+      xaxis = list(title = "Sampling Date"),
+      yaxis = list(title = "Charge Difference", side = "left"),
+      yaxis2 = list(
+        title = paste(input$chem1, "Mole"),
+        overlaying = "y",
+        side = "right"
+      ),
+      legend = list(title = list(text = paste(input$chem1, "Origin")))
+    )
+  
+  plot
+})
+
+}
+
+# Run the app
+shinyApp(ui = ui, server = server)
+
+```
+```{r}
+names(joined%>% select(contains("mol"), -c(Cl_alk_mol, Na_acid_mol, OC_mol, DOC_mol))) -> names_mol
+names(joined%>% select(contains("origin"), -c(Cl_alk_mol, -Na_acid_mol, OC_origin, DOC_origin))) -> names_origin
+
+```
+
+# General comments
+
+Old comments:
+
+Make sure you put your code into code chunks. This is a r markdown document so its in meant to be in markdown a simple mark up language with code chunks of R language. It makes it a little bit easier to stay organized. This way we can use the outline to give yus an idea of where in the code we are. Split the code into sections with headings, and in the end also knit it if we want to into a html or pdf to make our output presentable.
+
+I corrected your aggregation code, changing some variables. In general you didn't take into account the charge when converting to and from mekv/l and there were a few wrrors where you used the incorrect molar mass. otherwise it looks good.
+
+I went a few steps further ahead and gave you also an example on hiw to get a quick overview of your data. Now its your turn to go from here. To show us what this dataset really says.
