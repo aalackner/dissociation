@@ -2,3 +2,5 @@ results/
 input/
 .snakemake/
 logs/
+*.RData
+*.Rhistory

@@ -1,6 +1,7 @@
 rule all:
     input:
-        "results/chemistry/complete.csv"
+        "results/chemistry/complete.csv",
+        "results/reports/report.html"
 
 rule vmin_to_csv:
     """
@@ -35,3 +36,20 @@ rule all_data_aggregation:
         """ 
         Rscript scripts/optimizing_cd.r >&{log}
         """
+
+rule report:
+    output:
+        "results/reports/report.html"
+    input:
+        "results/chemistry/complete.csv",
+        "scripts/report.qmd"
+    log:
+        "logs/reports/report.log"
+    conda: 
+        "r-env"
+    shell:
+        """
+        quarto render scripts/report.qmd  --output-dir ../results/reports 
+        """
+
+    

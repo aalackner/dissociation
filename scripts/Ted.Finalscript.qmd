@@ -620,7 +620,6 @@ source("sourcecode_screening2024.R")
 coordinates <- read.csv("catch_landuse(NMD)_n1.csv") %>% select(mvm_id, stationName, stationCoordinateX, stationCoordinateY) %>% rename(lat = stationCoordinateX, long = stationCoordinateY)
 
 df_new %>% left_join(coordinates) %>% mutate(sampling_date = as.Date(sampling_date)) -> df_new
-
 ```
 
 ### sVISa

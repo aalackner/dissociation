@@ -1,0 +1,220 @@
+---
+title: "Charge_density calculations"
+author: Anna Lackner
+date: today
+format:
+    html:
+        embed-resources: true
+        toc: true
+        toc-depth: 2
+        warning: false
+        smooth-scroll: true
+---
+
+# Overview
+Based on 35 years of monitoring data of the water chemistry lab at the SLU Department of Aquatic Sciences and Assessment, the charge density of organic matter was calculated for over 40 000 samples across Swedish from water courses. 
+
+## Methothodology
+The following steps were performed to get final values of charge density (charge per mg of carbon). 
+
+1.  Raw water chemistry downloaded from the MVM database, for all streams in the database that had at least 10 years of continuous monthly sampling of TOC in the period 1990-2023. 
+2.  Preprocessing of water chemistry data to aggregate different measurnment methods for the same variable into single columns. Here samples which did not have enough other parameters measured that were needed in the following steps were dropped from the analysis. Which parameters were deemed necessary is further elaborated in Section Visual Minteq. 
+3. Modelling of DOC charge density in Visual Minteq by sweeping through the ADOM/DOC parameter for each sample, calculating charge difference for each ADOM/DOC. 
+4. Processing of Visual Minteq output to find the ADOM/DOC that best models the chemical equiblirum for each sample with the smallest charge difference and use it to calculate the charge density of each sample.
+5. Collection of catchment characteristics of the stations. 
+6. Statistical Analysis looking at both spatial and temporal variatioon of DOC charge density across the dataset.  
+
+# Data source
+
+- Downloaded 142 xxx samples
+
+# Preprocessing
+
+- 42 907 samples across 187 stations
+- Median number of samples per station: 208
+
+```{r}
+#| echo: false
+#| fig-width: 5 
+#| fig-height: 4
+#| fig-cap: Histogram of number of samples per station used in further analysis. There are 42 907 samples across 187 stations
+#| fig-alt: Histogram of number of samples per station
+#| cap-location: margin
+#| label: fig-hist_stations 
+
+library(tidyverse)
+
+data <- read.csv("../results/chemistry/complete.csv")
+stations <- read.csv("../input/catchment_characteristics/catch_landuse(NMD).csv") %>% select(mvm_id, stationCoordinateX, stationCoordinateY)
+
+# Step 1: Count rows for each mvm_id
+mvm_counts <- data %>%
+  group_by(mvm_id) %>%
+  summarise(row_count = n())
+
+# Step 2: Plot histogram of row counts
+ggplot(mvm_counts, aes(x = row_count)) +
+  geom_histogram(binwidth = 12, fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "",
+       x = "Samples per station",
+       y = "Frequency") +
+  theme_minimal()
+
+data %>% select(mvm_id) %>%
+  group_by(mvm_id) %>%
+  arrange(mvm_id) %>%       # Ensure data is ordered within each mvm_id (if needed)
+  slice(1) %>%             # Exclude the first row of each group
+  ungroup() %>% left_join(coordinates) %>% left_join(mvm_counts) -> stations
+```
+```{r}
+#| echo: false
+#| fig-width: 5 
+#| fig-height: 4
+#| fig-cap: Map of stations used in further analysis. There are 42 907 samples across 187 stations, color represents the number of samples for the station.
+#| fig-alt: Map of station.
+#| cap-location: margin
+#| label: fig-map_stations
+library(tidyverse)
+library(sf)
+# Step 1: Convert the data frame to an sf object using SWEREF 99 TM coordinates
+stations_sf <- st_as_sf(stations, coords = c("stationCoordinateX", "stationCoordinateY"), crs = 3006) # SWEREF 99 TM EPSG:3006
+
+# Step 2: Load a basemap of Sweden in the SWEREF 99 TM projection
+# Here, we use the 'rnaturalearth' package for a Sweden shapefile
+# install.packages("rnaturalearth")
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+# # Get Sweden map and transform to SWEREF 99 TM
+# sweden_map <- ne_countries(scale = "medium", country = "Sweden", returnclass = "sf") %>%
+#   st_transform(crs = 3006)
+
+# # Step 3: Plot Sweden map and stations
+# map_189 <- ggplot(data = sweden_map) +
+#   geom_sf(fill = "lightgray", color = "black") +  # Plot Sweden map
+#   geom_sf(data = stations_sf, aes(color = row_count), size = 2, alpha = 0.7) +  # Plot stations, colored by row_count
+#   scale_color_viridis_c(option = "plasma") +  # Use a color scale for row_count
+#   labs(title = "",
+#        color = "Row Count") +
+#   theme_minimal() +
+#   theme(legend.position = "right")
+
+# map_189 
+```
+
+# Visual Minteq
+
+## Required parameters
+
+- silicon set to same value as in Sjösted et al, 2010.
+- alkalinity/acidity was added as Na and Cl concentration respectively. 
+- bold parameters had to be measured parameters in the raw data, other parameters were set to 0 were not measured.
+
+| Name        | Var           | Valance |
+|-------------|---------------|---------|
+| **Aluminium**   | Al_mol        |         |
+| Copper      | Cu_mol        | +3      |
+| Manganese   | Mn_mol        | +2      |
+| **TOC**         | TOC_mol       | -x      |
+| Zinc        | Zn_mol        |         |
+| **SO4**         | SO4_mol       | -2      |
+| **NO3**         | NO3_N_mol     | -1      |
+| **Cl**          | Cl_alk_mol    | -1      |
+| **Pottasium**   | K_mol         | +1      |
+| **Calcium**     | Ca            | +2      |
+| **Sodium**      | Na_acid_mol   | +1      |
+| **Magnesium**   | Mg            | +2      |
+| Iron        | Fe            | +3      |
+| **Silicon**     | Si            |         |
+| Ammonium    | NH4           | +1      |
+| Fluorid     | F             | -1      |
+
+
+## Modelling Set-up
+
+- temperature set to 10C
+- pH 5.6
+- Ferrihydrite as possible solid phase
+- AlOH3 as possible solid phase
+- ADMO/DOC sweep from 0.05 to 3.5
+
+# Post Processing
+
+For each sample the ADOM/DOC was selected that had the minimum absolute value of charge difference. Charge difference was calculated according to Visual Minteq as: 
+
+$$
+\text{Charge difference (\%)} = 100 \times \left| \frac{\text{SumA} - \text{SumC}}{\text{SumA} + \text{SumC}} \right|
+$$
+
+```{r}
+#| echo: false
+#| fig-width: 5 
+#| fig-height: 4
+#| fig-cap: Histogram of ADOM/DOC for samples before and after filtering. 
+#| fig-alt: Histogram of ADOM/DOC.
+#| label: fig-hist_adom_doc_after
+#| fig-subcap:
+#|    - Before filtering of charge difference < 0.5%
+#|    - After filtering of charge difference < 0.5%
+
+ggplot(data, aes(x = adom_doc)) +
+  geom_histogram(binwidth = 0.05, fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = paste("Number of samples: ", nrow(data)),
+       x = "ADOM/DOC",
+       y = "Frequency") +
+  theme_minimal()
+
+ggplot(data %>% filter(abs(charge_diff) < 0.5), aes(x = adom_doc)) +
+  geom_histogram(binwidth = 0.05, fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = paste("Number of samples: ", nrow(data %>% filter(abs(charge_diff) < 0.5))),
+       x = "ADOM/DOC",
+       y = "Frequency") +
+  theme_minimal()
+```
+
+```{r}
+#| echo: false
+#| fig-width: 5 
+#| fig-height: 4
+#| fig-cap: Histogram of charge density for samples before and after filtering. 
+#| fig-alt: Histogram of charge density.
+#| label: fig-hist_cd_after
+#| fig-subcap:
+#|    - Before filtering of charge difference < 0.5%
+#|    - After filtering of charge difference < 0.5%
+
+ggplot(data, aes(x = org_charge_eq_mg_C)) +
+  geom_histogram(fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "",
+       x = "charge density (charge/ mg C)",
+       y = "Frequency") +
+  theme_minimal()
+
+ggplot(data %>% filter(abs(charge_diff) < 0.5), aes(x = org_charge_eq_mg_C)) +
+  geom_histogram(fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "",
+       x = "charge density (charge/ mg C)",
+       y = "Frequency") +
+  theme_minimal()
+```
+
+# Temporal Patters
+
+# Catchment Characteristics
+
+- [Soil Depth](https://www.sgu.se/en/products/maps/map-viewer/jordkartvisare/soil-depth/)
+- [PLC8 NMD Land use data]()
+- [Discharge]()
+- [Climate]()
+
+```{r}
+library(tidyverse)
+# library(vtable)
+soil_depth <- read.csv("../input/catchment_characteristics/soil_depth.csv") %>% mutate(soil_depth_iqr = X75th_percentile - X25th_percentile, soil_depth_mean = mean) %>% select(mvm_id, soil_depth_iqr, soil_depth_mean)
+```
+
+```{r}
+landuse <- read.csv("../input/catchment_characteristics/PLC8_landuse.csv")
+```
+
+# Spatial Patterns
