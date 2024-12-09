@@ -194,3 +194,89 @@ get_samples <- function(folder, id) {
     return(NA)
   })
 }
+
+library(plotly)
+
+# Define the function
+plot_loading <- function(opls_model, response_label = "TOC", vip.threshold = 1.0, text_size = 12) {
+  
+  vip_data <- enframe(getVipVn(opls_model), name = "Variable", value = "VIP.score")
+  
+  # Extract predictive and orthogonal loadings
+  loadings_ortho <- getLoadingMN(opls_model, orthoL = TRUE)
+  loadings_pred <- getLoadingMN(opls_model, orthoL = FALSE)
+  
+  # Convert the loadings to a data frame
+  loading_df <- data.frame(
+    Variable = rownames(loadings_pred), 
+    Predictive_Loading = loadings_pred[, 1],    # Extract the first column for predictive loading
+    Orthogonal_Loading = loadings_ortho[, 1]    # Extract the first column for orthogonal loading
+  ) %>% 
+    left_join(vip_data, by = "Variable") %>%    # Join with VIP data on variable name
+    mutate(color = ifelse(VIP.score < vip.threshold, "black", "blue"))
+  
+  # Filter for high VIP score variables (VIP > 1)
+  loading_VIP <- loading_df %>% filter(VIP.score > 1)
+  
+  # Extract the response variable position
+  x_1 <- opls_model@cMN[1, 1]  # Assuming the first coefficient as x
+  y_1 <- 0.0                    # y set to 0 for the response variable
+  
+  # Create the interactive Plotly plot
+  plot <- plot_ly(
+    data = loading_df,
+    colors = 'Paired',
+    x = ~Predictive_Loading,
+    y = ~Orthogonal_Loading,
+    type = 'scatter',
+    mode = 'markers',
+    marker = list(
+      size = ~VIP.score, 
+      sizeref = 0.01,
+      sizemode = 'area',
+      color = ~color, 
+      line = list(width = 0)
+    ),
+    text = ~Variable,
+    hovertemplate = paste(
+      "<b>%{text}</b><br><br>",
+      "%{yaxis.title.text}: %{y}<br>",
+      "%{xaxis.title.text}: %{x}<br>",
+      "VIP score: %{marker.size:,}",
+      "<extra></extra>"
+    )
+  ) %>%
+    layout(
+      title = "",
+      xaxis = list(title = "Predictive Loading"),
+      yaxis = list(title = "Orthogonal Loading"), 
+      showlegend = FALSE
+    ) %>% 
+    # Add variable annotations for high VIP scores
+    add_annotations(
+      x = loading_VIP$Predictive_Loading,
+      y = loading_VIP$Orthogonal_Loading - 0.03,
+      text = loading_VIP$Variable,
+      xref = "x",
+      yref = "y",
+      showarrow = FALSE,
+      font = (list(size = text_size))
+    ) %>% 
+    # Add point for the response variable
+    add_trace(
+      x = x_1,
+      y = y_1,
+      mode = 'markers+text',
+      type = 'scatter',
+      marker = list(size = 20, color = 'red'),
+      text = response_label,
+      textfont = (list(size = text_size)),
+      textposition = "top",
+      hovertemplate = paste(
+        "<b>", response_label, "</b><br><br>",
+        "Response Variable: %{x}<br>"
+      )
+    ) 
+  
+  return(plot)
+}
