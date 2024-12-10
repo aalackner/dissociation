@@ -196,6 +196,7 @@ get_samples <- function(folder, id) {
 }
 
 library(plotly)
+library(ropls)
 
 # Define the function
 plot_loading <- function(opls_model, response_label = "TOC", vip.threshold = 1.0, text_size = 12) {

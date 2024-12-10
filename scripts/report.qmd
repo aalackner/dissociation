@@ -6,9 +6,12 @@ format:
     html:
         embed-resources: true
         toc: true
-        toc-depth: 2
+        toc-depth: 3
         warning: false
         smooth-scroll: true
+        code-fold: true
+execute: 
+  cache: true
 ---
 
 # Overview
@@ -26,7 +29,86 @@ The following steps were performed to get final values of charge density (charge
 
 # Data source
 
-- Downloaded 142 xxx samples
+- Downloaded 142 000 samples from [MVM Database](https://miljodata.slu.se/MVM/)
+- Stations were preselected for streams that had TOC sampled 10 times a year for at least 10 consecutive years since 1990. 
+- Stations with more than 5% Urban area were excluded from the downloading. 
+- Data for 316 stations were downloaded. 
+
+```{python map of stations}
+import pandas as pd
+import geopandas as gpd
+import pandas as pd
+import matplotlib.pyplot as plt
+from shapely.geometry import Point
+
+# Path to the CSV file
+file_path = "../input/shapefiles/catch_316.zip"
+
+# Load the CSV file into a DataFrame
+gdf = gpd.read_file(f"zip://{sweden_shapefile}")
+# Step 2: Convert to GeoDataFrame with SWEREF 99TM CRS
+geometry = [Point(xy) for xy in zip(df["lat"], df["lon"])]
+stations_gdf = gpd.GeoDataFrame(df, geometry=geometry, crs="EPSG:3006") 
+stations_gdf.to_crs("EPSG:4326")  # SWEREF 99TM CRS
+
+# Step 3: Load Sweden shapefile and ensure it's in SWEREF 99TM
+sweden_shapefile = "../input/shapefiles/Sweden.zip"
+sweden_gdf = gpd.read_file(f"zip://{sweden_shapefile}")
+sweden_gdf = sweden_gdf.to_crs("EPSG:4326")  # Ensure CRS matches SWEREF 99TM
+
+# Create the Plotly map
+fig = go.Figure()
+
+# Add Sweden polygon layer
+fig.add_trace(go.Choropleth(
+    z=[1] * len(sweden_gdf),
+    locations=[i for i in range(len(sweden_gdf))],
+    showscale=False,
+    coloraxis="coloraxis",
+    geojson=sweden_gdf.geometry.__geo_interface__,
+    hoverinfo="skip",  # No hover for Sweden, just a base layer
+))
+
+# Add catchment areas with grey outlines
+fig.add_trace(go.Choropleth(
+    z=[1] * len(catch_gdf),
+    locations=[i for i in range(len(catch_gdf))],
+    showscale=False,
+    coloraxis="coloraxis",
+    geojson=catch_gdf.geometry.__geo_interface__,
+    hoverinfo="skip",  # No hover for catchment areas
+    line_color="black",  # Black outline for the catchments
+    fillcolor="grey",  # Grey fill for the catchments
+))
+
+# Add station points with hover info showing station ID
+fig.add_trace(go.Scattermapbox(
+    lat=stations_gdf['lat'],
+    lon=stations_gdf['lon'],
+    mode='markers',
+    marker=dict(
+        size=10,
+        color='red',
+        opacity=0.8,
+    ),
+    text=stations_gdf['stationID'],  # Hover text showing station ID
+    hoverinfo='text',  # Display only station ID on hover
+))
+
+# Update layout for the map
+fig.update_layout(
+    title="Catchment Areas and Stations",
+    mapbox=dict(
+        style="open-street-map",  # Base map style
+        center=dict(lat=58, lon=15),  # Approximate center of Sweden
+        zoom=5,  # Zoom level
+    ),
+    coloraxis_showscale=False,  # Hide color scale since it's not needed
+)
+
+# Show the map
+fig.show()
+```
 
 # Preprocessing
 
@@ -37,23 +119,23 @@ The following steps were performed to get final values of charge density (charge
 #| echo: false
 #| fig-width: 5 
 #| fig-height: 4
-#| fig-cap: Histogram of number of samples per station used in further analysis. There are 42 907 samples across 187 stations
+#| fig-cap: Histogram of number of samples per station used in further analysis. There are 42 907 samples across 187 stations. In further analysis only stations with more than 5 samples were considered, reducing the number of stations to 173.
 #| fig-alt: Histogram of number of samples per station
-#| cap-location: margin
 #| label: fig-hist_stations 
 
 library(tidyverse)
 
 data <- read.csv("../results/chemistry/complete.csv")
-stations <- read.csv("../input/catchment_characteristics/catch_landuse(NMD).csv") %>% select(mvm_id, stationCoordinateX, stationCoordinateY)
+mvm_ids <- unique(data$mvm_id)
+stations <- read.csv("../input/catchment_characteristics/catch_landuse(NMD).csv") %>% select(mvm_id, stationCoordinateX, stationCoordinateY, area_ARO_m2)
 
 # Step 1: Count rows for each mvm_id
 mvm_counts <- data %>%
   group_by(mvm_id) %>%
-  summarise(row_count = n())
+  summarise(sample_count = n())
 
 # Step 2: Plot histogram of row counts
-ggplot(mvm_counts, aes(x = row_count)) +
+ggplot(mvm_counts, aes(x = sample_count)) +
   geom_histogram(binwidth = 12, fill = "skyblue", color = "black", alpha = 0.7) +
   labs(title = "",
        x = "Samples per station",
@@ -63,43 +145,12 @@ ggplot(mvm_counts, aes(x = row_count)) +
 data %>% select(mvm_id) %>%
   group_by(mvm_id) %>%
   arrange(mvm_id) %>%       # Ensure data is ordered within each mvm_id (if needed)
-  slice(1) %>%             # Exclude the first row of each group
-  ungroup() %>% left_join(coordinates) %>% left_join(mvm_counts) -> stations
-```
-```{r}
-#| echo: false
-#| fig-width: 5 
-#| fig-height: 4
-#| fig-cap: Map of stations used in further analysis. There are 42 907 samples across 187 stations, color represents the number of samples for the station.
-#| fig-alt: Map of station.
-#| cap-location: margin
-#| label: fig-map_stations
-library(tidyverse)
-library(sf)
-# Step 1: Convert the data frame to an sf object using SWEREF 99 TM coordinates
-stations_sf <- st_as_sf(stations, coords = c("stationCoordinateX", "stationCoordinateY"), crs = 3006) # SWEREF 99 TM EPSG:3006
+  slice(1) %>%             # take the first row of each group
+  ungroup() %>% left_join(stations) %>% left_join(mvm_counts) %>% filter(sample_count >= 5) -> stations
 
-# Step 2: Load a basemap of Sweden in the SWEREF 99 TM projection
-# Here, we use the 'rnaturalearth' package for a Sweden shapefile
-# install.packages("rnaturalearth")
-library(rnaturalearth)
-library(rnaturalearthdata)
+mvm_ids <- stations$mvm_id
 
-# # Get Sweden map and transform to SWEREF 99 TM
-# sweden_map <- ne_countries(scale = "medium", country = "Sweden", returnclass = "sf") %>%
-#   st_transform(crs = 3006)
-
-# # Step 3: Plot Sweden map and stations
-# map_189 <- ggplot(data = sweden_map) +
-#   geom_sf(fill = "lightgray", color = "black") +  # Plot Sweden map
-#   geom_sf(data = stations_sf, aes(color = row_count), size = 2, alpha = 0.7) +  # Plot stations, colored by row_count
-#   scale_color_viridis_c(option = "plasma") +  # Use a color scale for row_count
-#   labs(title = "",
-#        color = "Row Count") +
-#   theme_minimal() +
-#   theme(legend.position = "right")
-
-# map_189 
+data %>% filter(mvm_id %in% mvm_ids) -> data
 ```
 
 # Visual Minteq
@@ -147,10 +198,7 @@ $$
 $$
 
 ```{r}
-#| echo: false
-#| fig-width: 5 
-#| fig-height: 4
-#| fig-cap: Histogram of ADOM/DOC for samples before and after filtering. 
+#| fig-cap: Histogram of ADOM/DOC for samples before and after filtering for 173 stations (number of samples > 5).  
 #| fig-alt: Histogram of ADOM/DOC.
 #| label: fig-hist_adom_doc_after
 #| fig-subcap:
@@ -173,9 +221,6 @@ ggplot(data %>% filter(abs(charge_diff) < 0.5), aes(x = adom_doc)) +
 ```
 
 ```{r}
-#| echo: false
-#| fig-width: 5 
-#| fig-height: 4
 #| fig-cap: Histogram of charge density for samples before and after filtering. 
 #| fig-alt: Histogram of charge density.
 #| label: fig-hist_cd_after
@@ -198,23 +243,169 @@ ggplot(data %>% filter(abs(charge_diff) < 0.5), aes(x = org_charge_eq_mg_C)) +
   theme_minimal()
 ```
 
-# Temporal Patters
 
 # Catchment Characteristics
 
 - [Soil Depth](https://www.sgu.se/en/products/maps/map-viewer/jordkartvisare/soil-depth/)
-- [PLC8 NMD Land use data]()
-- [Discharge]()
-- [Climate]()
+- [PLC8 NMD Land use data](https://helcom.fi/helcom-at-work/projects/plc-8/)
+- [Discharge](https://www.smhi.se/data/hydrologi/vattenwebb/data-for-delavrinningsomraden-sotvatten-1.118236)
+- [Climate](https://www.smhi.se/data/ladda-ner-data/griddade-nederbord-och-temperaturdata-pthbv)
+- [Peat area](https://www.slu.se/en/environment/statistics-and-environmental-data/search-for-open-environmental-data/comprehensive-peat-map-of-the-forest-land/#downloadInfo)
+- [NDVI](https://www.usgs.gov/landsat-missions/landsat-normalized-difference-vegetation-index)
 
 ```{r}
 library(tidyverse)
-# library(vtable)
-soil_depth <- read.csv("../input/catchment_characteristics/soil_depth.csv") %>% mutate(soil_depth_iqr = X75th_percentile - X25th_percentile, soil_depth_mean = mean) %>% select(mvm_id, soil_depth_iqr, soil_depth_mean)
+soil_depth <- read.csv("../input/catchment_characteristics/soil_depth.csv") %>% mutate(soil_depth_iqr = X75th_percentile - X25th_percentile, soil_depth_mean = mean) %>% select(mvm_id, soil_depth_iqr, soil_depth_mean) %>% filter(mvm_id %in% mvm_ids)%>% mutate(mvm_id = as.factor(mvm_id))
 ```
 
 ```{r}
-landuse <- read.csv("../input/catchment_characteristics/PLC8_landuse.csv")
+landuse <- read.csv("../input/catchment_characteristics/PLC8_landuse.csv") %>% filter(mvm_id %in% mvm_ids) %>% mutate(mvm_id = as.factor(mvm_id))
 ```
 
+```{r}
+#| fig-cap: Histogram of climate variables.
+#| label: fig-climate 
+#| fig-subcap:
+#|    - mean annual temperature
+#|    - total annual precipitation
+#| fig-alt: Histogram of charge density.
+
+climate <- read.csv("../input/climate/daily_climate.csv") %>% filter(mvm_id %in% mvm_ids) %>% mutate(date = as.Date(time), year = year(date)) %>% filter (year >= 1990)  %>% group_by(mvm_id, year) %>% summarize(mean_annual_temp = mean(tas_avg), annual_precip= sum(pr_avg)) %>% ungroup() %>% group_by(mvm_id) %>% summarize(mean_annual_temp = mean(mean_annual_temp), annual_precip= mean(annual_precip)) %>% ungroup() %>% mutate(mvm_id = as.factor(mvm_id))
+
+ggplot(climate, aes(x = mean_annual_temp)) +
+  geom_histogram(fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "",
+       x = "mean annual temperature (C)",
+       y = "Frequency") +
+  theme_minimal()
+
+ggplot(climate, aes(x = annual_precip)) +
+  geom_histogram(fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "",
+       x = "total annual precipitation (mm)",
+       y = "Frequency") +
+  theme_minimal()
+```
+
+```{r}
+#| fig-cap: Discharge for all catchments in the DOC dissociation study. 
+#| fig-alt: Histogram of charge density.
+#| label: fig-discharge
+#| fig-subcap:
+#|    - Boxplot of all the catchments together.
+#|    - Example of median annual discharge for 4 different catchments.
+#
+discharge <- read.csv("../input/discharge/daily_discharge.csv") %>% filter(mvm_id %in% mvm_ids) %>% mutate(date = as.Date(Datum), year = year(date)) %>% group_by(mvm_id, year) %>% summarize(median_q_m3_s = median(q), p25_q_m3_s  = quantile(q, probs = 0.25, na.rm = TRUE) , p75_q_m3_s = quantile(q, probs = 0.75, na.rm = TRUE)) %>% ungroup() %>% left_join(stations)%>% mutate(mvm_id = as.factor(mvm_id)) 
+
+ggplot(discharge, aes(group = year, x = year, y = log(median_q_m3_s))) +
+geom_boxplot()
+
+ggplot(discharge %>% filter (mvm_id %in% c(21, 180,33,222 )) %>% mutate(q_spec= (median_q_m3_s / area_ARO_m2)*1000), aes( x = year, y = q_spec, color = mvm_id)) +
+geom_line()+
+labs( y = "Specific discharge (mm/s)")
+
+discharge %>% mutate(q_spec= (median_q_m3_s / area_ARO_m2)*1000, p25_spec = (p25_q_m3_s / area_ARO_m2)*1000, p75_spec = (p75_q_m3_s / area_ARO_m2)*1000 ) %>%
+group_by(mvm_id) %>% summarise(
+    mean_Q_spec = mean(q_spec), p25_Q_spec = mean(p25_spec), p75_Q_spec = mean(p75_spec), mean_Q = mean(median_q_m3_s)) %>% ungroup() -> discharge_y
+```
+
+```{r}
+#| fig-cap: Summer NDVI June-August for all catchments in the DOC dissociation study. 
+#| fig-alt: Histogram of charge density.
+#| label: fig-ndvi
+#| fig-subcap:
+#|    - Boxplot of all the catchments together.
+#|    - Example of summer NDVI for 4 different catchments.
+
+
+ndvi <- read.csv("../input/catchment_characteristics/NDVI.csv")  %>% filter(mvm_id %in% mvm_ids) %>% mutate(date = make_date(year,month,15)) %>% filter (month %in% c(6,7,8)) %>% group_by(mvm_id, year) %>% summarize(summer_NDVI = mean(NDVI_median, na.rm = TRUE)) %>% ungroup() %>% mutate(mvm_id = as.factor(mvm_id)) 
+
+ggplot(ndvi, aes(group = year, x = year, y = summer_NDVI)) +
+geom_boxplot()
+
+ggplot(ndvi %>% filter (mvm_id %in% c(21, 180,33,222 )), aes( x = year, y = summer_NDVI, color = mvm_id)) +
+geom_line()
+
+ndvi_y <- ndvi %>% group_by(mvm_id)%>% summarize(summer_NDVI = mean(summer_NDVI, na.rm = TRUE)) %>% ungroup()
+```
+```{r}
+peat <- read.csv("../input/catchment_characteristics/peat_area.csv") %>% rename(water = X0, mineral_soil = X1, peat_a30 = X2, peat_a40 = X3, peat_a50 = X4) %>% mutate(peat = ((peat_a30 + peat_a40 + peat_a50) / sum), water = (water / sum), mineral_soil = (mineral_soil / sum )) %>% select(peat, mvm_id, water, mineral_soil)%>% filter(mvm_id %in% mvm_ids)  %>% mutate(mvm_id = as.factor(mvm_id))
+
+```
+## Summary
+```{r}
+# library(kableextra)
+catch_char <- landuse %>% 
+        left_join(peat %>% select(-water), by = join_by(mvm_id)) %>%
+        left_join(soil_depth, by = join_by(mvm_id)) %>%
+        left_join(climate, by = join_by(mvm_id))%>% 
+        left_join(ndvi_y, by = join_by(mvm_id)) %>%
+        left_join(discharge_y) %>% 
+        left_join(stations %>% select(-sample_count ) %>% mutate(mvm_id = as_factor(mvm_id))) %>% 
+        mutate(log_mean_Q = log(mean_Q)) %>% select(-mean_Q)
+
+library(vtable)
+
+sumtable(catch_char %>% select(-mvm_id), out ="kable", digits = 3)
+```
+
+# Temporal Patters
+
+For each individual catchemnt split into three time periods, has to have at least 2 years samples in each time period for it to work. 
+ 
+
 # Spatial Patterns
+
+```{r}
+# merge response and landuse as one dataframe called all
+all <- data %>% filter(abs(charge_diff) < 0.5) %>%
+ group_by(mvm_id) %>% summarise(org_charge_eq_mg_C = median(org_charge_eq_mg_C), mean_toc = median(TOC_mol)) %>%
+ ungroup() %>% mutate(mvm_id = as_factor(mvm_id))%>% 
+ select(mvm_id, org_charge_eq_mg_C, mean_toc) %>%
+ left_join(catch_char, by = join_by(mvm_id))
+
+all %>% write.csv("../results/r_py/pls_input.csv")
+```
+
+# OPLS
+
+I chose to use a OPLS instead of a PLS for relating the results to catchment characteristics. Orthogonal Partial Least Squares (OPLS) enables to separately model the variation correlated (predictive) to the factor of interest and the uncorrelated (orthogonal) variation. While performing similarly to PLS, OPLS facilitates easier interpretation. I used the R package [ropls](https://rdrr.io/bioc/ropls/man/opls.html) to perform the below analysis, its the underlying code of the SIMCA software as used in analysis such as [Ehnvall et al., 2023](https://www.sciencedirect.com/science/article/pii/S0048969723037555).
+
+## Organic charge
+
+### OPLS
+```{r}
+source("../src/sourcecode.R")
+library(ropls)
+library(plotly)
+
+opls.model <- opls(all %>% select(-c(org_charge_eq_mg_C, mvm_id)), all$org_charge_eq_mg_C, orthoI = 1, predI = 1)
+```
+
+```{r}
+library(tibble)
+source("../src/sourcecode.R")
+plot_loading(opls.model, response_label = "Org. charge density", vip.threshold = 1.0, text_size = 12)
+```
+
+### PLS
+
+Here a PLS was run instead of an OPLS for comparison
+```{r}
+pls.model <- opls(all %>% select(-c(org_charge_eq_mg_C, mvm_id)), all$org_charge_eq_mg_C)
+```
+
+## TOC
+```{r}
+# TOC
+opls.model.TOC <- opls(all %>% select(-c(org_charge_eq_mg_C, mvm_id, mean_toc)), all$mean_toc, orthoI = 1, predI = 1)
+```
+
+```{r}
+plot_loading(opls.model.TOC, response_label = "TOC", vip.threshold = 1.0, text_size = 12)
+```
+
+```{r}
+pls.model <- opls(all %>% select(-c(org_charge_eq_mg_C,mean_toc, mvm_id)), all$mean_toc)
+```
+
