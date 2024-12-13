@@ -6,4 +6,4 @@ logs/
 *.Rhistory
 
 report/*
-!report/report.qmd
+!report/index.qmd
