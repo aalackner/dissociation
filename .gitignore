@@ -4,5 +4,6 @@ input/
 logs/
 *.RData
 *.Rhistory
-scripts/report_files/
-scripts/report_cache/
+
+report/*
+!report/report.qmd

@@ -1,0 +1,764 @@
+---
+title: "Charge_density calculations"
+author: Anna Lackner
+date: today
+format:
+    html:
+        embed-resources: false
+        toc: true
+        toc-depth: 3
+        warning: false
+        smooth-scroll: true
+        code-fold: true
+        page-layout: full
+execute: 
+  cache: true
+---
+
+# Overview
+Based on 35 years of monitoring data of the water chemistry lab at the SLU Department of Aquatic Sciences and Assessment, the charge density of organic matter was calculated for over 40 000 samples across Swedish from water courses. 
+
+## Methothodology
+The following steps were performed to get final values of charge density (charge per mg of carbon). 
+
+1.  Raw water chemistry downloaded from the MVM database, for all streams in the database that had at least 10 years of continuous monthly sampling of TOC in the period 1990-2023. 
+2.  Preprocessing of water chemistry data to aggregate different measurnment methods for the same variable into single columns. Here samples which did not have enough other parameters measured that were needed in the following steps were dropped from the analysis. Which parameters were deemed necessary is further elaborated in Section Visual Minteq. 
+3. Modelling of DOC charge density in Visual Minteq by sweeping through the ADOM/DOC parameter for each sample, calculating charge difference for each ADOM/DOC. 
+4. Processing of Visual Minteq output to find the ADOM/DOC that best models the chemical equiblirum for each sample with the smallest charge difference and use it to calculate the charge density of each sample.
+5. Collection of catchment characteristics of the stations. 
+6. Statistical Analysis looking at both spatial and temporal variatioon of DOC charge density across the dataset.  
+
+# Data source
+
+- Downloaded 142 000 samples from [MVM Database](https://miljodata.slu.se/MVM/)
+- Stations were preselected for streams that had TOC sampled 10 times a year for at least 10 consecutive years since 1990. 
+- Stations with more than 5% Urban area were excluded from the downloading. 
+- Data for 316 stations were downloaded of these 126 were used in the end as they had data from SLU's lab and could be sufficiently modelled and are shown on a map @fig-map-stations, while the number of samples available are shown in @fig-hist_stations.
+ 
+
+```{python map of stations}
+#| jupyter_compat: true
+import pandas as pd
+import geopandas as gpd
+from shapely.geometry import Point
+import plotly.express as px
+import plotly.io as pio
+
+# import plotly.io as pio
+# pio.renderers.default = "plotly_mimetype+notebook_connected"
+
+# Path to the CSV file
+file_path = "../results/r_py/pls_input.csv"
+
+# # Load the CSV file into a DataFrame
+df = pd.read_csv(file_path)
+
+
+# Step 2: Convert to GeoDataFrame with SWEREF 99TM CRS
+geometry = [Point(xy) for xy in zip(df["stationCoordinateX"], df["stationCoordinateY"])]
+stations_gdf = gpd.GeoDataFrame(df, geometry=geometry, crs="EPSG:3006")  # SWEREF 99TM CRS
+
+# Step 3: Load Sweden shapefile and ensure it's in SWEREF 99TM
+sweden_shapefile = "../input/shapefiles/Sweden.zip"
+sweden_gdf = gpd.read_file(f"zip://{sweden_shapefile}")
+
+sweden_gdf = sweden_gdf.to_crs("EPSG:4326")
+sweden_geojson = sweden_gdf.__geo_interface__
+
+lakes_shapefile = "../input/shapefiles/Swedish_Lakes.zip"
+lakes_gdf = gpd.read_file(f"zip://{lakes_shapefile}")
+
+lakes_gdf = lakes_gdf.to_crs("EPSG:4326")
+lakes_geojson = lakes_gdf.__geo_interface__
+
+
+
+
+
+# Extract coordinates from the GeoDataFrame for Plotly
+stations_gdf = stations_gdf.to_crs("EPSG:4326")
+stations_gdf["lon"] = stations_gdf.geometry.x
+stations_gdf["lat"] = stations_gdf.geometry.y
+stations_gdf["area_km2"] = stations_gdf["area_ARO_m2"] / (1000000)
+stations_gdf["org_charge_eq_g_C"] = stations_gdf["org_charge_eq_mg_C"] * 1000
+# Convert Sweden boundary GeoDataFrame to GeoJSON for base map overlay
+
+
+def map_stations():
+  # Create an interactive map
+  fig = px.scatter_map(
+      stations_gdf,
+      lat="lat",
+      lon="lon",
+      color="area_km2",  # Column to determine color
+      color_continuous_scale="Viridis",  # Color scale (can be adjusted)
+      zoom=3.5,  # Adjust zoom level as needed
+      map_style="white-bg",
+      title="Stations with more than 5 samples",
+      custom_data=['mvm_id', "stationName", "area_km2","mean_annual_temp", "annual_precip" ]
+  )
+
+  fig = fig.update_traces(hovertemplate="MMV ID:  %{customdata[0]} <br>Station name: %{customdata[1]} <br>Area (km2): %{customdata[2]:.0f} <br>MAT (C): %{customdata[3]:.2f} <br>Annual Precipitation (mm): %{customdata[4]:.0f}",
+  marker=dict(size=10))
+
+
+  fig.update_layout(
+      map={
+          "layers": [
+              {
+                  "source": sweden_geojson,
+                  "type": "line",
+                  "color": "black",
+                  "line": {"width": 1},
+              },
+              {
+                  "source": lakes_geojson,
+                  "type": "line",
+                  "color": "grey",
+                  "line": {"width": 1},
+              }
+          ]
+      },
+      title={"x": 0.5},
+      width=500,  # Set width of the plot
+      height=600,  # Center the title
+      margin={"r": 0, "t": 40, "l": 0, "b": 0},  # Adjust margins
+  )
+
+  return(fig)
+
+
+map_stations().write_html("../results/reports/maps/map_stations.html", full_html= False,include_plotlyjs = True )
+```
+
+
+```{r}
+#| cache: false
+#| fig-cap: Stations with available data that were sucessfully modelled in this study
+#| fig-alt: Map of stations.
+#| label: fig-map-stations
+#| fig-height: 8
+htmltools::includeHTML("../results/reports/maps/map_stations.html")
+```
+# Preprocessing
+
+- 42 907 samples across 187 stations
+- Median number of samples per station: 208
+- Removed all samples that were not analyzed in the SLU lab (some samples did not have tthe field analysis lab field filled in. These were also excluded.)
+
+```{r}
+#| echo: false
+#| fig-width: 5 
+#| fig-height: 4
+#| fig-cap: Histogram of number of samples per station used in further analysis. There are 42 907 samples across 187 stations. In further analysis only stations with more than 5 samples were considered, reducing the number of stations to 173.
+#| fig-alt: Histogram of number of samples per station
+#| label: fig-hist_stations 
+
+library(tidyverse)
+
+sample_ids <- read.csv("../results/chemistry/slu_sample_ids.csv") %>% rename(sample_id =`SLU_sampleId`) # these are all the smaple id's of samples that were analysed at the SLU lab
+data <- read.csv("../results/chemistry/complete.csv")
+mvm_ids <- unique(data$mvm_id)
+stations <- read.csv("../input/catchment_characteristics/catch_landuse(NMD).csv") %>% select(mvm_id, stationCoordinateX, stationCoordinateY, area_ARO_m2, stationName) 
+
+# Step 1: Count rows for each mvm_id
+mvm_counts <- data %>%
+  group_by(mvm_id) %>%
+  summarise(sample_count = n())
+
+# Step 2: Plot histogram of row counts
+ggplot(mvm_counts, aes(x = sample_count)) +
+  geom_histogram(binwidth = 12, fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "",
+       x = "Samples per station",
+       y = "Frequency") +
+  theme_minimal()
+
+# For all the labs, not applicable anymore 
+# data %>% select(mvm_id) %>%
+#   group_by(mvm_id) %>%
+#   arrange(mvm_id) %>%       # Ensure data is ordered within each mvm_id (if needed)
+#   slice(1) %>%             # take the first row of each group
+#   ungroup() %>% left_join(stations) %>% left_join(mvm_counts) %>% filter(sample_count >= 5) -> stations_all
+
+# Lets have a look at the stations when we exclude the samples that are not measured at SLU
+data %>% filter(sample_id %in% sample_ids$sample_id)%>% select(mvm_id) %>%
+  group_by(mvm_id) %>%
+  arrange(mvm_id) %>%       # Ensure data is ordered within each mvm_id (if needed)
+  slice(1) %>%             # take the first row of each group
+  ungroup() %>% left_join(stations) %>% left_join(mvm_counts) %>% filter(sample_count >= 5) -> stations
+
+
+mvm_ids <- stations$mvm_id
+
+data %>% filter(mvm_id %in% mvm_ids) -> data
+```
+
+# Visual Minteq
+
+## Required parameters
+
+- silicon set to same value as in Sjösted et al, 2010: 0.01mM were it was not measured.
+
+- bold parameters had to be measured parameters in the raw data, other parameters were set to 0 were not measured.
+
+| Name        | Var           | Valance |
+|-------------|---------------|---------|
+| **Aluminium**   | Al_mol        |         |
+| Copper      | Cu_mol        | +3      |
+| Manganese   | Mn_mol        | +2      |
+| **TOC**         | TOC_mol       | -x      |
+| Zinc        | Zn_mol        |         |
+| **SO4**         | SO4_mol       | -2      |
+| **NO3**         | NO3_N_mol     | -1      |
+| **Cl**          | Cl_alk_mol    | -1      |
+| **Pottasium**   | K_mol         | +1      |
+| **Calcium**     | Ca            | +2      |
+| **Sodium**      | Na_acid_mol   | +1      |
+| **Magnesium**   | Mg            | +2      |
+| Iron        | Fe            | +3      |
+| **Silicon**     | Si            |         |
+| Ammonium    | NH4           | +1      |
+| Fluorid     | F             | -1      |
+
+
+## Modelling Set-up
+
+- temperature set to 10°C
+- pH 5.6
+- Ferrihydrite as possible solid phase
+- AlOH3 as possible solid phase
+- ADMO/DOC sweep from 0.05 to 3.5
+- alkalinity/acidity was added as Na and Cl concentration respectively. 
+
+---
+
+# Post Processing
+
+For each sample the ADOM/DOC was selected that had the minimum absolute value of charge difference. Charge difference was calculated according to Visual Minteq as: 
+
+$$
+\text{Charge difference (\%)} = 100 \times \left| \frac{\text{SumA} - \text{SumC}}{\text{SumA} + \text{SumC}} \right|
+$$
+
+:::panel-tabset
+
+#### ADOM/DOC
+```{r}
+#| fig-cap: Histogram of ADOM/DOC for samples before and after filtering for 173 stations (number of samples > 5).  
+#| fig-alt: Histogram of ADOM/DOC.
+#| label: fig-hist_adom_doc_after
+#| fig-subcap:
+#|    - Before filtering of charge difference < 0.5%
+#|    - After filtering of charge difference < 0.5%
+
+ggplot(data, aes(x = adom_doc)) +
+  geom_histogram(binwidth = 0.05, fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = paste("Number of samples: ", nrow(data)),
+       x = "ADOM/DOC",
+       y = "Frequency") +
+  theme_minimal()
+
+ggplot(data %>% filter(abs(charge_diff) < 0.5), aes(x = adom_doc)) +
+  geom_histogram(binwidth = 0.05, fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = paste("Number of samples: ", nrow(data %>% filter(abs(charge_diff) < 0.5))),
+       x = "ADOM/DOC",
+       y = "Frequency") +
+  theme_minimal()
+```
+
+#### Charge density
+
+```{r}
+#| fig-cap: Histogram of charge density for samples before and after filtering. 
+#| fig-alt: Histogram of charge density.
+#| label: fig-hist_cd_after
+#| fig-subcap:
+#|    - Before filtering of charge difference < 0.5%
+#|    - After filtering of charge difference < 0.5%
+
+ggplot(data, aes(x = org_charge_eq_mg_C)) +
+  geom_histogram(fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "",
+       x = "charge density (charge/ mg C)",
+       y = "Frequency") +
+  theme_minimal()
+
+ggplot(data %>% filter(abs(charge_diff) < 0.5), aes(x = org_charge_eq_mg_C)) +
+  geom_histogram(fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "",
+       x = "charge density (charge/ mg C)",
+       y = "Frequency") +
+  theme_minimal()
+```
+
+:::
+
+---
+
+# Catchment Characteristics
+
+::: panel-tabset
+
+#### Soil Depth
+
+[SGU SOil Depth Raster map](https://www.sgu.se/en/products/maps/map-viewer/jordkartvisare/soil-depth/)
+
+```{r}
+library(tidyverse)
+soil_depth <- read.csv("../input/catchment_characteristics/soil_depth.csv") %>% mutate(soil_depth_iqr = X75th_percentile - X25th_percentile, soil_depth_mean = mean) %>% select(mvm_id, soil_depth_iqr, soil_depth_mean) %>% filter(mvm_id %in% mvm_ids)%>% mutate(mvm_id = as.factor(mvm_id))
+```
+
+#### Landuse
+
+[NMD Land use data](https://www.naturvardsverket.se/4a43ca/contentassets/37e8b38528774982b5840554f02a1f81/produktbeskrivning-nmd-2018-basskikt-v2-2.pdf)
+
+```{r}
+landuse <- read.csv("../input/catchment_characteristics/PLC8_landuse.csv") %>% filter(mvm_id %in% mvm_ids) %>% mutate(mvm_id = as.factor(mvm_id))
+```
+
+#### Climate
+
+[SMHI PT-HBV Climate drided data](https://www.smhi.se/data/ladda-ner-data/griddade-nederbord-och-temperaturdata-pthbv)
+
+
+```{r}
+#| fig-cap: Histogram of climate variables.
+#| label: fig-climate 
+#| fig-subcap:
+#|    - mean annual temperature
+#|    - total annual precipitation
+#| fig-alt: Histogram of charge density.
+
+climate <- read.csv("../input/climate/daily_climate.csv") %>% filter(mvm_id %in% mvm_ids) %>% mutate(date = as.Date(time), year = year(date)) %>% filter (year >= 1990)  %>% group_by(mvm_id, year) %>% summarize(mean_annual_temp = mean(tas_avg), annual_precip= sum(pr_avg)) %>% ungroup() %>% group_by(mvm_id) %>% summarize(mean_annual_temp = mean(mean_annual_temp), annual_precip= mean(annual_precip)) %>% ungroup() %>% mutate(mvm_id = as.factor(mvm_id))
+
+ggplot(climate, aes(x = mean_annual_temp)) +
+  geom_histogram(fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "",
+       x = "mean annual temperature (C)",
+       y = "Frequency") +
+  theme_minimal()
+
+ggplot(climate, aes(x = annual_precip)) +
+  geom_histogram(fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "",
+       x = "total annual precipitation (mm)",
+       y = "Frequency") +
+  theme_minimal()
+```
+
+#### Discharge
+
+[SMHI S-HYPE](https://www.smhi.se/data/hydrologi/vattenwebb/data-for-delavrinningsomraden-sotvatten-1.118236)
+
+Area proportional discharge calculated for each station, using the local discharge when considering sub-cacthments of the SMHI unit catchments (Aroid catchments), and total when the SMHI subcatchment is smaller than the station catchment. Were possible upstream station corrected discharge was used.   
+
+```{r}
+#| fig-cap: Discharge for all catchments in the DOC dissociation study. 
+#| fig-alt: Histogram of charge density.
+#| label: fig-discharge
+#| fig-subcap:
+#|    - Boxplot of all the catchments together.
+#|    - Example of median annual discharge for 4 different catchments.
+#
+discharge <- read.csv("../input/discharge/daily_discharge.csv") %>% filter(mvm_id %in% mvm_ids) %>% mutate(date = as.Date(Datum), year = year(date)) %>% group_by(mvm_id, year) %>% summarize(median_q_m3_s = median(q), p25_q_m3_s  = quantile(q, probs = 0.25, na.rm = TRUE) , p75_q_m3_s = quantile(q, probs = 0.75, na.rm = TRUE)) %>% ungroup() %>% left_join(stations)%>% mutate(mvm_id = as.factor(mvm_id)) 
+
+ggplot(discharge, aes(group = year, x = year, y = log(median_q_m3_s))) +
+geom_boxplot()
+
+ggplot(discharge %>% filter (mvm_id %in% c(21, 180,33,222 )) %>% mutate(q_spec= (median_q_m3_s / area_ARO_m2)*1000), aes( x = year, y = q_spec, color = mvm_id)) +
+geom_line()+
+labs( y = "Specific discharge (mm/s)")
+
+discharge %>% mutate(q_spec= (median_q_m3_s / area_ARO_m2)*1000, p25_spec = (p25_q_m3_s / area_ARO_m2)*1000, p75_spec = (p75_q_m3_s / area_ARO_m2)*1000 ) %>%
+group_by(mvm_id) %>% summarise(
+    mean_Q_spec = mean(q_spec), p25_Q_spec = mean(p25_spec), p75_Q_spec = mean(p75_spec), mean_Q = mean(median_q_m3_s)) %>% ungroup() -> discharge_y
+```
+
+#### NDVI
+
+[NDVI](https://www.usgs.gov/landsat-missions/landsat-normalized-difference-vegetation-index)
+
+Extracted using GGE for monthly time series for each catchment of median NDVI from the Landcare compiled NDVI images. These are taken at a 8 interval since before 1990 using 4 different landsat sattelites. The compiled dataset was used as NDVI data was preprocessed and alignesd between the different sattelites.
+
+
+```{r}
+#| fig-cap: Summer NDVI June-August for all catchments in the DOC dissociation study. 
+#| fig-alt: NDVI.
+#| label: fig-ndvi
+#| fig-subcap:
+#|    - Boxplot of all the catchments together.
+#|    - Example of summer NDVI for 4 different catchments.
+
+
+ndvi <- read.csv("../input/catchment_characteristics/NDVI.csv")  %>% filter(mvm_id %in% mvm_ids) %>% mutate(date = make_date(year,month,15)) %>% filter (month %in% c(6,7,8)) %>% group_by(mvm_id, year) %>% summarize(summer_NDVI = mean(NDVI_median, na.rm = TRUE)) %>% ungroup() %>% mutate(mvm_id = as.factor(mvm_id)) 
+
+ggplot(ndvi, aes(group = year, x = year, y = summer_NDVI)) +
+geom_boxplot()
+
+ggplot(ndvi %>% filter (mvm_id %in% c(21, 180,33,222 )), aes( x = year, y = summer_NDVI, color = mvm_id)) +
+geom_line()
+
+ndvi_y <- ndvi %>% group_by(mvm_id)%>% summarize(summer_NDVI = mean(summer_NDVI, na.rm = TRUE)) %>% ungroup()
+```
+
+#### Peat Area
+
+[SLU Peat Map](https://www.slu.se/en/environment/statistics-and-environmental-data/search-for-open-environmental-data/comprehensive-peat-map-of-the-forest-land/#downloadInfo)
+
+Peat is considered >30cm pead depth.  
+
+```{r}
+#| fig-cap: Peat area data from the slu peat map. 
+#| fig-alt: Peat area
+#| label: fig-peat
+#| 
+peat <- read.csv("../input/catchment_characteristics/peat_area.csv") %>% rename(water = X0, mineral_soil = X1, peat_a30 = X2, peat_a40 = X3, peat_a50 = X4) %>% mutate(peat = ((peat_a30 + peat_a40 + peat_a50) / sum), water = (water / sum), mineral_soil = (mineral_soil / sum )) %>% select(peat, mvm_id, water, mineral_soil)%>% filter(mvm_id %in% mvm_ids)  %>% mutate(mvm_id = as.factor(mvm_id))
+
+df_long <- peat %>%
+  pivot_longer(
+    cols = c(mineral_soil, water, peat),
+    names_to = "Variable",
+    values_to = "Value"
+  )
+
+ggplot(df_long, aes(x = Variable, y = Value, fill = Variable)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(
+    title = "",
+    x = "Variable",
+    y = "% cover"
+  ) 
+
+```
+
+:::
+
+## Summary
+
+Most are given as the persenctage of the area in the catchment covered by the specific data source. Exeptions are:  
+
+- Temperature i.e. MAT (mean annual average in °C)
+- Discharge (annual and interquantile range average m3/s)
+- Precipitation (mm/year), summer NDVI (NDVI for mean of June July and August for every year averaged over the time period 1990-2023)
+- Specific discharge mean, p25, p75, (extracted median, p75, p25 for each year and then averaged them over the entire time period. mm/s)
+
+
+```{r}
+# library(kableextra)
+catch_char <- landuse %>% 
+        left_join(peat %>% select(-water), by = join_by(mvm_id)) %>%
+        left_join(soil_depth, by = join_by(mvm_id)) %>%
+        left_join(climate, by = join_by(mvm_id))%>% 
+        left_join(ndvi_y, by = join_by(mvm_id)) %>%
+        left_join(discharge_y) %>% 
+        left_join(stations %>% select(-sample_count ) %>% mutate(mvm_id = as_factor(mvm_id))) %>% 
+        mutate(log_mean_Q = log(mean_Q)) %>% select(-mean_Q)
+
+library(vtable)
+
+sumtable(catch_char %>% select(-mvm_id), out ="kable", digits = 3)
+```
+
+---
+
+# Temporal Patters
+
+For each individual catchemnt split into three time periods, has to have at least 2 years samples in each time period for it to work. 
+ 
+---
+
+# Spatial Patterns
+
+
+```{r}
+# merge response and landuse as one dataframe called all
+all <- data %>% filter(abs(charge_diff) < 0.5) %>% mutate(sVISa = Abs_F420_5cm/(TOC_mol*12.01))%>%
+ group_by(mvm_id) %>% summarise(org_charge_eq_mg_C = median(org_charge_eq_mg_C), mean_toc = median(TOC_mol), median_sVISa = median(sVISa)) %>%
+ ungroup() %>% mutate(mvm_id = as_factor(mvm_id))%>% 
+ select(mvm_id, org_charge_eq_mg_C, mean_toc, median_sVISa) %>%
+ left_join(catch_char, by = join_by(mvm_id))
+
+all %>% write.csv("../results/r_py/pls_input.csv")
+```
+
+::: panel-tabset
+
+```{python prep for maps}
+#| cache: false
+import pandas as pd
+import geopandas as gpd
+from shapely.geometry import Point
+import plotly.express as px
+import plotly.io as pio
+
+# import plotly.io as pio
+# pio.renderers.default = "plotly_mimetype+notebook_connected"
+
+# Path to the CSV file
+file_path = "../results/r_py/pls_input.csv"
+
+# Load the CSV file into a DataFrame
+df = pd.read_csv(file_path)
+
+# Step 2: Convert to GeoDataFrame with SWEREF 99TM CRS
+geometry = [Point(xy) for xy in zip(df["stationCoordinateX"], df["stationCoordinateY"])]
+stations_gdf = gpd.GeoDataFrame(df, geometry=geometry, crs="EPSG:3006")  # SWEREF 99TM CRS
+
+# Step 3: Load Sweden shapefile and ensure it's in SWEREF 99TM
+sweden_shapefile = "../input/shapefiles/Sweden.zip"
+sweden_gdf = gpd.read_file(f"zip://{sweden_shapefile}")
+sweden_gdf = sweden_gdf.to_crs("EPSG:3006")  # Ensure CRS matches SWEREF 99TM
+
+sweden_gdf = sweden_gdf.to_crs("EPSG:4326")
+stations_gdf = stations_gdf.to_crs("EPSG:4326")
+
+# Extract coordinates from the GeoDataFrame for Plotly
+stations_gdf["lon"] = stations_gdf.geometry.x
+stations_gdf["lat"] = stations_gdf.geometry.y
+stations_gdf["area_km2"] = stations_gdf["area_ARO_m2"] / (1000000)
+stations_gdf["org_charge_eq_g_C"] = stations_gdf["org_charge_eq_mg_C"] * 1000
+# Convert Sweden boundary GeoDataFrame to GeoJSON for base map overlay
+sweden_geojson = sweden_gdf.__geo_interface__
+```
+## TOC
+```{python}
+#| jupyter_compat: true
+ 
+stations_gdf["mean_toc_mg_l"] = stations_gdf["mean_toc"] * (12010)
+
+def map_toc():
+# Create an interactive map
+  fig = px.scatter_map(
+      stations_gdf,
+      lat="lat",
+      lon="lon",
+      color="mean_toc_mg_l",  # Column to determine color
+      color_continuous_scale="Viridis",  # Color scale (can be adjusted)
+      zoom=3.5,  # Adjust zoom level as needed
+      map_style="white-bg",
+      title="TOC concentration",
+      custom_data= ['mvm_id', "mean_toc_mg_l", "area_km2", "stationName"]
+  )
+
+  fig.update_traces(hovertemplate="MMV ID:  %{customdata[0]} <br>TOC (mg C/l): %{customdata[1]:.6f} <br>Area: %{customdata[2]:.0f}")
+
+  fig.update_traces(marker=dict(size=10))
+
+  # Overlay Sweden boundary
+  fig.update_layout(
+      map={
+          "layers": [
+              {
+                  "source": sweden_geojson,
+                  "type": "line",
+                  "color": "black",
+                  "line": {"width": 1},
+              },
+              {
+                  "source": lakes_geojson,
+                  "type": "line",
+                  "color": "grey",
+                  "line": {"width": 1},
+              }
+          ]
+      },
+  # Set height of the plot
+      title={"x": 0.5},
+      width=500,  # Set width of the plot
+      height=600,  # Set height of the plot  # Center the title
+      margin={"r": 0, "t": 40, "l": 0, "b": 0},  # Adjust margins
+  )  
+
+  return fig
+   
+map_toc().write_html("../results/reports/maps/map_toc.html", full_html= False,include_plotlyjs = True )
+```
+
+```{r}
+#| fig-cap: Mean TOC concentration for each station of all data at a single station 
+#| fig-alt: Map of TOC mean.
+#| label: fig-map-toc
+#| fig-height: 8
+htmltools::includeHTML("../results/reports/maps/map_toc.html")
+```
+
+## sVISa
+
+sVISa is the specific visual absorbance calculated as: 
+
+$$
+\text{sVISa} =  \frac{\text{Absorbance filtered 420mm at 5cm depth}}{\text{TOC mg/C}}
+$$
+
+It is similar to SUVA, which uses Absorbance at 254mm instead of 420mm. It is used as an indicator of the character of DOC. 
+
+```{python}
+#| jupyter_compat: true
+
+def map_sVISa(): 
+    fig = px.scatter_map(
+        stations_gdf,
+        lat="lat",
+        lon="lon",
+        color="median_sVISa",  # Column to determine color
+        color_continuous_scale="Viridis",  # Color scale (can be adjusted)
+        zoom=3.5,  # Adjust zoom level as needed
+        map_style="white-bg",
+        title="sVISa",
+        custom_data= ['mvm_id', "median_sVISa", "area_km2", "stationName"]
+    )
+
+    fig.update_traces(hovertemplate="MMV ID:  %{customdata[0]} <br>Station name: %{customdata[3]}  <br>sVISa: %{customdata[1]:.6f} <br>Area: %{customdata[2]:.0f}")
+
+    fig.update_traces(marker=dict(size=10))
+
+    # Overlay Sweden boundary
+    fig.update_layout(
+        map={
+          "layers": [
+              {
+                  "source": sweden_geojson,
+                  "type": "line",
+                  "color": "black",
+                  "line": {"width": 1},
+              },
+              {
+                  "source": lakes_geojson,
+                  "type": "line",
+                  "color": "grey",
+                  "line": {"width": 1},
+              }
+          ]
+        },
+        width=500,  # Set width of the plot
+        height=600,  # Set height of the plot
+        title={"x": 0.5},  # Center the title
+        margin={"r": 0, "t": 40, "l": 0, "b": 0},  # Adjust margins
+    ) 
+    return(fig)
+
+map_sVISa().write_html("../results/reports/maps/map_sVISa.html", full_html= False,include_plotlyjs = True)
+```
+
+```{r}
+#| fig-cap: Median sVISa for each station of all data at a single station 
+#| fig-alt: Map of median sVISa.
+#| label: fig-map-sVISa
+#| fig-height: 8
+htmltools::includeHTML( "../results/reports/maps/map_sVISa.html")
+```
+
+## Organic charge density
+
+```{python}
+#| jupyter_compat: true
+
+
+def map_cd():
+# Create an interactive map
+  fig = px.scatter_map(
+      stations_gdf,
+      lat="lat",
+      lon="lon",
+      color="org_charge_eq_g_C",  # Column to determine color
+      color_continuous_scale="Viridis",  # Color scale (can be adjusted)
+      zoom=3.5,  # Adjust zoom level as needed
+      map_style="white-bg",
+      title="Organic charge density",
+      custom_data=['mvm_id', "org_charge_eq_g_C", "area_km2", "stationName"]
+  )
+
+  fig.update_traces(hovertemplate="MMV ID:  %{customdata[0]} <br>Station name: %{customdata[3]} <br>Organi charge density (eq/g C): %{customdata[1]:.6f} <br>Area: %{customdata[2]:.0f}")
+
+  fig.update_traces(marker=dict(size=10))
+
+  # Overlay Sweden boundary
+  fig.update_layout(
+      map={
+          "layers": [
+              {
+                  "source": sweden_geojson,
+                  "type": "line",
+                  "color": "black",
+                  "line": {"width": 1},
+              },
+              {
+                  "source": lakes_geojson,
+                  "type": "line",
+                  "color": "grey",
+                  "line": {"width": 1},
+              }
+          ]
+      },
+      width=500,  # Set width of the plot
+      height=600,  # Set height of the plot
+      title={"x": 0.5},  # Center the title
+      margin={"r": 0, "t": 40, "l": 0, "b": 0},  # Adjust margins
+  ) 
+  return (fig)
+map_cd().write_html("../results/reports/maps/map_cd.html", full_html= False,include_plotlyjs = True)
+```
+
+```{r}
+#| fig-cap: Median organic charge density for each station of all data at a single station 
+#| fig-alt: Map of median organisc charge density.
+#| label: fig-map-charge-density
+#| fig-height: 8
+htmltools::includeHTML( "../results/reports/maps/map_cd.html")
+```
+
+:::
+
+## Multivariate Analysis
+
+I chose to use a OPLS instead of a PLS for relating the results to catchment characteristics. Orthogonal Partial Least Squares (OPLS) enables to separately model the variation correlated (predictive) to the factor of interest and the uncorrelated (orthogonal) variation. While performing similarly to PLS, OPLS facilitates easier interpretation. I used the R package [ropls](https://rdrr.io/bioc/ropls/man/opls.html) to perform the below analysis, its the underlying code of the SIMCA software as used in analysis such as [Ehnvall et al., 2023](https://www.sciencedirect.com/science/article/pii/S0048969723037555).
+
+::: {.panel-tabset}
+
+
+### Organic charge
+
+**OPLS**
+```{r}
+source("../src/sourcecode.R")
+library(ropls)
+library(plotly)
+
+opls.model <- opls(all %>% select(-c(org_charge_eq_mg_C, mvm_id, stationName)), all$org_charge_eq_mg_C, orthoI = 1, predI = 1)
+```
+
+```{r}
+library(tibble)
+source("../src/sourcecode.R")
+plot_loading(opls.model, response_label = "Org. charge density", vip.threshold = 1.0, text_size = 12)
+```
+
+**PLS**
+
+Here a PLS was run instead of an OPLS for comparison
+```{r}
+pls.model <- opls(all %>% select(-c(org_charge_eq_mg_C, mvm_id, stationName)), all$org_charge_eq_mg_C)
+```
+
+### TOC
+
+**OPLS**
+```{r}
+# TOC
+opls.model.TOC <- opls(all %>% select(-c(org_charge_eq_mg_C, mvm_id, mean_toc, stationName)), all$mean_toc, orthoI = 1, predI = 1)
+```
+
+```{r}
+plot_loading(opls.model.TOC, response_label = "TOC", vip.threshold = 1.0, text_size = 12)
+```
+
+**PLS**
+
+
+```{r}
+pls.model <- opls(all %>% select(-c(org_charge_eq_mg_C,mean_toc, mvm_id, stationName)), all$mean_toc)
+```
+
+:::
