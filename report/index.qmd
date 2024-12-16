@@ -475,7 +475,7 @@ For each individual catchemnt split into three time periods, has to have at leas
 ```{r}
 # merge response and landuse as one dataframe called all
 all <- data %>% filter(abs(charge_diff) < 0.5) %>% mutate(sVISa = Abs_F420_5cm/(TOC_mol*12.01))%>%
- group_by(mvm_id) %>% summarise(org_charge_eq_mg_C = median(org_charge_eq_mg_C), mean_toc = median(TOC_mol), median_sVISa = median(sVISa)) %>%
+ group_by(mvm_id) %>% summarise(org_charge_eq_mg_C = median(org_charge_eq_mg_C), mean_toc = median(TOC_mol), median_sVISa = median(sVISa, na.rm = TRUE)) %>%
  ungroup() %>% mutate(mvm_id = as_factor(mvm_id))%>% 
  select(mvm_id, org_charge_eq_mg_C, mean_toc, median_sVISa) %>%
  left_join(catch_char, by = join_by(mvm_id))
@@ -726,7 +726,7 @@ source("../src/sourcecode.R")
 library(ropls)
 library(plotly)
 
-opls.model <- opls(all %>% select(-c(org_charge_eq_mg_C, mvm_id, stationName)), all$org_charge_eq_mg_C, orthoI = 1, predI = 1)
+opls.model <- opls(all %>% select(-c(org_charge_eq_mg_C,median_sVISa, mvm_id, stationName)), all$org_charge_eq_mg_C, orthoI = 1, predI = 1)
 ```
 
 ```{r}
@@ -739,15 +739,26 @@ plot_loading(opls.model, response_label = "Org. charge density", vip.threshold =
 
 Here a PLS was run instead of an OPLS for comparison
 ```{r}
-pls.model <- opls(all %>% select(-c(org_charge_eq_mg_C, mvm_id, stationName)), all$org_charge_eq_mg_C)
+pls.model <- opls(all %>% select(-c(org_charge_eq_mg_C, median_sVISa, mvm_id, stationName)), all$org_charge_eq_mg_C)
 ```
+
+### sVISa
+
+```{r}
+opls.model.sVISa <- opls(all %>% filter(median_sVISa > 0) %>% select(-c(org_charge_eq_mg_C, mvm_id, mean_toc, stationName, median_sVISa)), all %>% filter(median_sVISa > 0) %>% .$median_sVISa, orthoI = 1, predI = 1)
+```
+
+```{r}
+plot_loading(opls.model.sVISa, response_label = "sVISa", vip.threshold = 1.0, text_size = 12)
+```
+
 
 ### TOC
 
 **OPLS**
 ```{r}
 # TOC
-opls.model.TOC <- opls(all %>% select(-c(org_charge_eq_mg_C, mvm_id, mean_toc, stationName)), all$mean_toc, orthoI = 1, predI = 1)
+opls.model.TOC <- opls(all %>% select(-c(org_charge_eq_mg_C,median_sVISa, mvm_id, mean_toc, stationName)), all$mean_toc, orthoI = 1, predI = 1)
 ```
 
 ```{r}
@@ -758,7 +769,102 @@ plot_loading(opls.model.TOC, response_label = "TOC", vip.threshold = 1.0, text_s
 
 
 ```{r}
-pls.model <- opls(all %>% select(-c(org_charge_eq_mg_C,mean_toc, mvm_id, stationName)), all$mean_toc)
+pls.model <- opls(all %>% select(-c(org_charge_eq_mg_C,mean_toc,median_sVISa, mvm_id, stationName)), all$mean_toc)
 ```
+
+### Comparison
+
+```{r}
+VIP_all <- enframe(getVipVn(opls.model), name = "Variable", value = "org.charge") %>%  left_join(enframe(getVipVn(opls.model.TOC), name = "Variable", value = "TOC")) %>% left_join(enframe(getVipVn(opls.model.sVISa), name = "Variable", value = "sVISa")) 
+
+loading_oc <- getLoadingMN(opls.model)[,1]         # Values of the vector become the 'Value' column
+loading_toc <- getLoadingMN(opls.model.TOC)[,1] 
+loading_sVISa <- getLoadingMN(opls.model.sVISa)[,1] 
+
+# Function to process a single column with named loading vector
+process_column <- function(column, loading_vector) {
+  # Filter and sort the column
+  filtered_indices <- which(column > 0.9) # Filter values > 0.9
+  sorted_indices <- order(column[filtered_indices], decreasing = TRUE)
+  filtered_variables <- VIP_all$Variable[filtered_indices][sorted_indices]
+  filtered_values <- column[filtered_indices][sorted_indices]
+  
+  # Match loading signs
+  signed_values <- sapply(1:length(filtered_variables), function(i) {
+    variable <- filtered_variables[i]
+    value <- sprintf("%.3f", filtered_values[i]) # Format value to 3 decimal places
+    sign <- ifelse(loading_vector[variable] > 0, "+", "-") # Use vector names to match
+    paste0(sign, value) # Combine sign and value
+  })
+  
+  # Return as a data frame
+  data.frame(
+    Variable = filtered_variables,
+    Value = signed_values
+  )
+}
+
+# Process each column with its corresponding loading vector
+sorted_data <- list(
+  Charge_Density = process_column(VIP_all$`org.charge`, loading_oc),
+  TOC = process_column(VIP_all$TOC, loading_toc),
+  sVISa = process_column(VIP_all$`sVISa`, loading_sVISa)
+)
+
+# Find maximum number of rows across all processed data
+max_rows <- max(sapply(sorted_data, nrow))
+
+# Pad shorter columns with NA
+padded_data <- lapply(sorted_data, function(df) {
+  if (nrow(df) < max_rows) {
+    padding <- max_rows - nrow(df)
+    df <- rbind(df, data.frame(Variable = rep(NA, padding), Value = rep(NA, padding)))
+  }
+  df
+})
+
+# Combine results into a single data frame
+sorted_df <- data.frame(
+  Org_Charge_Density = padded_data$Charge_Density$Variable,
+  Org_Charge_Density_VIP = padded_data$Charge_Density$Value,
+  TOC= padded_data$TOC$Variable,
+  TOC_VIP = padded_data$TOC$Value,
+  sVISa = padded_data$sVISa$Variable,
+  sVISa_VIP = padded_data$sVISa$Value
+)
+
+
+
+
+r2_q2 <- function(pls_model){
+  r2 <- pls_model@summaryDF[1,2]
+  q2 <- pls_model@summaryDF[1,3]
+  s <- length(pls_model@scoreMN)
+  v <- length(pls_model@loadingMN)
+  
+  return(c(r2, q2, s, v))
+}
+
+new_rows <- data.frame(
+  Org_Charge_Density = c("R2", "Q2", "samples", "variables"),
+  Org_Charge_Density_VIP = r2_q2(opls.model), # Example values
+  TOC = c("R2", "Q2", "samples", "variables"),
+  TOC_VIP = r2_q2(opls.model.TOC), # Example values
+  sVISa = c("R2", "Q2", "samples", "variables"),
+  sVISa_VIP = r2_q2(opls.model.sVISa)
+)
+
+final_df <- rbind(new_rows, sorted_df)
+
+# View the sorted data frame
+
+options(knitr.kable.NA = "")
+final_df %>%
+  kable(.,booktabs = TRUE,   col.names = c("Variable", "VIP", "Variable", "VIP", "Variable", "VIP")) %>%
+  kable_styling(latex_options = c("striped", "hold_position", "scale_down"), font_size = 7) %>% # Clean output table
+  add_header_above(c("Organic Charge Density" = 2, "TOC" = 2, "sVISa" = 2)) 
+
+```
+
 
 :::
