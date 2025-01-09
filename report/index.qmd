@@ -10,15 +10,448 @@ format:
         warning: false
         smooth-scroll: true
         code-fold: true
+        theme: lux
         page-layout: full
 execute: 
   cache: true
 ---
 
 # Overview
-Based on 35 years of monitoring data of the water chemistry lab at the SLU Department of Aquatic Sciences and Assessment, the charge density of organic matter was calculated for over 40 000 samples across Swedish from water courses. 
+Based on 35 years of monitoring data of the water chemistry lab at the SLU Department of Aquatic Sciences and Assessment, the charge density of organic matter was calculated for over 40 000 samples across Sweden from water courses. 
 
-## Methothodology
+# Background
+
+```{r}
+#| include: false
+# re.read <- 're read' # this lets the script re run the GAM functions
+# re.read <- 're load' # here the script reads in the already run GAM data 
+re.read <- 're fig' # loads just the figures associated with the data but not the GAM data itself.
+
+library(tidyverse)  
+```
+
+In [Eklöf et al, 2020](https://www.sciencedirect.com/science/article/pii/S0043135421007405?via%3Dihub) trends in TOC and SVISa were found to cease  increasing around 2000-2010 widespread across the country.  
+
+::: panel-tabset
+
+```{r}
+library(tidyverse)
+
+source("../src/sourcecode_screening2024.R")
+
+coordinates <- read.csv("../input/catchment_characteristics/catch_landuse(NMD).csv") %>% select(mvm_id, stationName, stationCoordinateX, stationCoordinateY) %>% rename(x = stationCoordinateX, y = stationCoordinateY)
+
+df <- read.csv("../input/chemistry/chemistry_complete_no_selection.csv")
+
+df %>% left_join(coordinates) %>% mutate(sampling_date = as.Date(sampling_date)) %>%  mutate(TOC =TOC_mol*12.01*1000,sVISa = Abs_F420_5cm / TOC ) -> df
+```
+
+### sVISa
+
+```{r}
+#| include: false
+#Trend plot for sVISa
+
+if (re.read == 're read'){
+df %>%  filter(!is.na(sVISa)) %>% # create sVISa and filter any variables where it does not exist
+  group_by(mvm_id) %>%  # group by mvm_id to remove andy station where we don't have enough data points
+  filter(n() >= 50) %>%  
+  ungroup() %>%
+     select(mvm_id, sVISa, sampling_date,x, stationName) %>% mutate(SiteID = as.factor(mvm_id))%>% pivot_longer(cols=c("sVISa")) %>% 
+    screeningmodeling(values=value,
+                    datevar = sampling_date, 
+                    link = "identity", 
+                    conf.type = "conf",
+                    conf.level=0.95,
+                    beep = FALSE, 
+                    tdist = FALSE,
+                    autocor = TRUE,
+                    mvm_id,
+                    x,
+                    stationName, name) ->
+  trendplotdata_chemistry_sVISa
+  trendplotdata_chemistry_sVISa %>% left_join(coordinates) %>% saveRDS(., file = "data/trendplotdata_chemistry_sVISa.rds")
+  }  else if (re.read == 're load') {
+    trendplotdata_chemistry_sVISa <- readRDS( file = "data/trendplotdata_chemistry_sVISa.rds")
+  }
+```
+
+```{r}
+#| include: false
+#Trend plot for sVISa
+
+if (re.read == 're load'){
+  fig <- trendplotdata_chemistry_sVISa %>%plot_proportions()+ ggtitle("sVISa") + 
+        theme(text=element_text(size=5), #change font size of all text
+        axis.text=element_text(size=5), #change font size of axis text
+        axis.title=element_text(size=6), #change font size of axis titles
+        plot.title=element_text(size=6.5), #change font size of plot title
+        legend.text=element_text(size=6), #change font size of legend text
+        legend.title=element_text(size=5)) 
+  fig %>% ggsave(file = "figures/sVISa_proportion.png", width = 10,
+  height = 6,
+  units = "cm",
+  dpi = 300) 
+}  
+```
+
+```{r}
+#| include: false
+#Trend plot for sVISa
+
+if (re.read == 're load' & exists("trendplotdata_chemistry_sVISa")){
+  fig <- trendplotdata_chemistry_sVISa%>% left_join(coordinates) %>%plot_screeningtrends(y_id = mvm_id, sorting = -y) + ggtitle("sVISa")+ xlab(NULL) + 
+        theme(text=element_text(size=5), #change font size of all text
+        axis.text=element_text(size=3), #change font size of axis text
+        axis.title=element_text(size=6), #change font size of axis titles
+        plot.title=element_text(size=6.5), #change font size of plot title
+        legend.text=element_text(size=3), #change font size of legend text
+        legend.title=element_text(size=3.5),
+        legend.key.size = unit(0.3, 'cm'))
+  fig %>% ggsave(plot = ., file = "figures/sVISa_lasange.png", width = 5,
+  height = 20,
+  units = "cm",
+  dpi = 300)
+} 
+```
+
+
+```{r}
+#| echo: false
+all <- read.csv("../results/r_py/pls_input.csv")
+mvm_ids <- unique(all$mvm_id)
+df %>% filter(mvm_id %in% mvm_ids) -> df_selected
+```
+
+```{r}
+#| include: false
+if (re.read == 're read'){
+df_selected %>%  filter(!is.na(sVISa)) %>% # create sVISa and filter any variables where it does not exist
+  group_by(mvm_id) %>%  # group by mvm_id to remocve andy station where we don't have enough data points
+  filter(n() >= 50) %>%  
+  ungroup() %>%
+     select(mvm_id, sVISa, sampling_date,x, stationName) %>% mutate(SiteID = as.factor(mvm_id))%>% pivot_longer(cols=c("sVISa")) %>% 
+    screeningmodeling(values=value,
+                    datevar = sampling_date, 
+                    link = "identity", 
+                    conf.type = "conf",
+                    conf.level=0.95,
+                    beep = FALSE, 
+                    tdist = FALSE,
+                    autocor = TRUE,
+                    mvm_id,
+                    x,
+                    stationName, name) ->
+  trendplotdata_selected_sVISa
+  trendplotdata_selected_sVISa %>% left_join(coordinates) %>% saveRDS(., file = "data/trendplotdata_selected_sVISa.rds")
+}  else if (re.read == 're load') {
+  trendplotdata_selected_sVISa <- tryCatch({
+    readRDS(file = "data/trendplotdata_selected_sVISa.rds")
+  }, error = function(e) {
+    message("An error occurred while reading the RDS file: ", e$message)
+    NULL # Return NULL or an alternative value to handle the error gracefully
+  })
+}
+```
+
+```{r}
+#| include: false
+# Trend plot for sVISa
+
+if (re.read != 're fig' & exists("trendplotdata_selected_sVISa")){
+  fig <- trendplotdata_selected_sVISa %>%plot_proportions()+ ggtitle("sVISa") + 
+        theme(text=element_text(size=5), #change font size of all text
+        axis.text=element_text(size=5), #change font size of axis text
+        axis.title=element_text(size=6), #change font size of axis titles
+        plot.title=element_text(size=6.5), #change font size of plot title
+        legend.text=element_text(size=6), #change font size of legend text
+        legend.title=element_text(size=5)) 
+  fig %>% ggsave(file = "figures/sVISa_proportion_selected.png", width = 10,
+  height = 6,
+  units = "cm",
+  dpi = 300) 
+}  
+```
+
+```{r}
+#| include: false
+if (re.read != 're fig' & exists("trendplotdata_selected_sVISa")){
+  fig <- trendplotdata_selected_sVISa%>%plot_screeningtrends(y_id = mvm_id, sorting = -y) + ggtitle("sVISa")+ xlab(NULL) + 
+        theme(text=element_text(size=5), #change font size of all text
+        axis.text=element_text(size=3), #change font size of axis text
+        axis.title=element_text(size=6), #change font size of axis titles
+        plot.title=element_text(size=6.5), #change font size of plot title
+        legend.text=element_text(size=3), #change font size of legend text
+        legend.title=element_text(size=3.5),
+        legend.key.size = unit(0.3, 'cm')) #change legend key size))
+  fig %>% ggsave(plot = ., file = "figures/sVISa_lasange_selected.png", width = 5,
+  height = 20,
+  units = "cm",
+  dpi = 300)
+} 
+```
+```{r}
+#| include: false
+if (re.read == 're read'){
+df_selected %>%  filter(!is.na(sVISa)) %>% # create sVISa and filter any variables where it does not exist
+  group_by(mvm_id) %>%  # group by mvm_id to remocve andy station where we don't have enough data points
+  filter(n() >= 50) %>%  
+  ungroup() %>%
+     select(mvm_id, sVISa, sampling_date,x, stationName) %>% mutate(SiteID = as.factor(mvm_id))%>% pivot_longer(cols=c("sVISa")) %>% 
+    screeningmodeling(values=value,
+                    datevar = sampling_date, 
+                    link = "identity", 
+                    conf.type = "conf",
+                    conf.level=0.95,
+                    beep = FALSE, 
+                    tdist = FALSE,
+                    autocor = TRUE,
+                    mvm_id,
+                    x,
+                    stationName, name) ->
+  trendplotdata_selected_sVISa
+  trendplotdata_selected_sVISa %>% left_join(coordinates) %>% saveRDS(., file = "data/trendplotdata_selected_sVISa.rds")
+}  else if (re.read == 're load') {
+  trendplotdata_selected_sVISa <- tryCatch({
+    readRDS(file = "data/trendplotdata_selected_sVISa.rds")
+  }, error = function(e) {
+    message("An error occurred while reading the RDS file: ", e$message)
+    NULL # Return NULL or an alternative value to handle the error gracefully
+  })
+}
+```
+
+```{r}
+#| include: false
+# Trend plot for sVISa
+
+if (re.read != 're fig' & exists("trendplotdata_selected_sVISa")){
+  fig <- trendplotdata_selected_sVISa %>%plot_proportions()+ ggtitle("sVISa") + 
+        theme(text=element_text(size=5), #change font size of all text
+        axis.text=element_text(size=5), #change font size of axis text
+        axis.title=element_text(size=6), #change font size of axis titles
+        plot.title=element_text(size=6.5), #change font size of plot title
+        legend.text=element_text(size=6), #change font size of legend text
+        legend.title=element_text(size=5)) 
+  fig %>% ggsave(file = "figures/sVISa_proportion_selected.png", width = 10,
+  height = 6,
+  units = "cm",
+  dpi = 300) 
+}  
+```
+
+
+
+```{r}
+#| include: false
+if (re.read != 're fig' & exists("trendplotdata_selected_sVISa")){
+  fig <- trendplotdata_selected_sVISa%>%plot_screeningtrends(y_id = mvm_id, sorting = -y) + ggtitle("sVISa")+ xlab(NULL) + 
+        theme(text=element_text(size=5), #change font size of all text
+        axis.text=element_text(size=3), #change font size of axis text
+        axis.title=element_text(size=6), #change font size of axis titles
+        plot.title=element_text(size=6.5), #change font size of plot title
+        legend.text=element_text(size=3), #change font size of legend text
+        legend.title=element_text(size=3.5),
+        legend.key.size = unit(0.3, 'cm')) #change legend key size))
+  fig %>% ggsave(plot = ., file = "figures/sVISa_lasange_selected.png", width = 5,
+  height = 20,
+  units = "cm",
+  dpi = 300)
+} 
+```
+
+```{r}
+#| echo: false
+#| fig-cap: "Proportion plot of sVISa trends across Sweden. Updated from Eklöf et al, 2020."
+#| fig-alt: sVISa proportion of trends plot.
+#| fig-subcap:
+#|      - For all 316 stations that fit the initial selection criteria.
+#|      - For the 126 stations charge density was modelled in this study.
+#| label: fig-sVISa-prop
+#| layout-ncol: 2
+
+knitr::include_graphics(path = c("figures/sVISa_proportion.png","figures/sVISa_proportion_selected.png" ), error = FALSE)
+```
+
+```{r}
+#| echo: false
+#| fig.show: hold
+#| fig.align: center
+#| fig-cap: "Lasange plot of sVISa trends across Sweden sorted North to South. Updated from Eklöf et al, 2020."
+#| fig-subcap:
+#|    - All 316 stations that match the initial selection criteria.
+#|    - 126 stations for which we could model charge density sucessfully for.
+#| fig-alt: sVISa lasange plot of trends plot.
+#| label: fig-sVISa-lasange
+#| layout-ncol: 2
+knitr::include_graphics(path = c("figures/sVISa_lasange.png","figures/sVISa_lasange_selected.png" ), error = FALSE)
+```
+
+
+### TOC
+
+```{r}
+#| include: false
+if (re.read == 're read'){
+df  %>% filter(!is.na(TOC) )%>% # create TOC and filter any variables where it does not exist
+  group_by(mvm_id) %>%  # group by mvm_id to remocve andy station where we don't have enough data points
+  filter(n() >= 50) %>%  
+  ungroup() %>%
+     select(mvm_id, TOC, sampling_date,x, stationName) %>% mutate(SiteID = as.factor(mvm_id))%>% pivot_longer(cols=c("TOC")) %>% 
+    screeningmodeling(values=value,
+                    datevar = sampling_date, 
+                    link = "identity", 
+                    conf.type = "conf",
+                    conf.level=0.95,
+                    beep = FALSE, 
+                    tdist = FALSE,
+                    autocor = TRUE,
+                    mvm_id,
+                    x,
+                    stationName) ->
+  trendplotdata_chemistry_TOC
+  trendplotdata_chemistry_TOC %>% left_join(coordinates) %>% saveRDS(., file = "data/trendplotdata_chemistry_TOC.rds")
+  }  else if (re.read == 're load') {
+  trendplotdata_chemistry_TOC <- tryCatch({
+    readRDS(file = "data/trendplotdata_chemistry_TOC.rds")
+  }, error = function(e) {
+    message("An error occurred while reading the RDS file: ", e$message)
+    NULL # Return NULL or an alternative value to handle the error gracefully
+  })
+}
+```
+
+```{r}
+#| include: false
+#Trend plot for TOC
+
+if (re.read != 're fig' & exists("trendplotdata_chemistry_TOC")){
+  fig <- trendplotdata_chemistry_TOC %>% plot_proportions()+ ggtitle("TOC") + 
+        theme(text=element_text(size=5), #change font size of all text
+        axis.text=element_text(size=5), #change font size of axis text
+        axis.title=element_text(size=6), #change font size of axis titles
+        plot.title=element_text(size=6.5), #change font size of plot title
+        legend.text=element_text(size=6), #change font size of legend text
+        legend.title=element_text(size=5)) 
+  fig %>% ggsave(file = "figures/TOC_proportion.png", width = 10,
+  height = 6,
+  units = "cm",
+  dpi = 300) 
+}  
+```
+
+```{r}
+#| include: false
+#Trend plot for TOC
+
+if (re.read != 're fig'& exists("trendplotdata_chemistry_TOC")){
+  fig <- trendplotdata_chemistry_TOC %>% plot_screeningtrends(y_id = mvm_id, sorting = -y) + ggtitle("TOC")+ xlab(NULL) + 
+        theme(text=element_text(size=5), #change font size of all text
+        axis.text=element_text(size=3), #change font size of axis text
+        axis.title=element_text(size=6), #change font size of axis titles
+        plot.title=element_text(size=6.5), #change font size of plot title
+        legend.text=element_text(size=3), #change font size of legend text
+        legend.title=element_text(size=3.5),
+        legend.key.size = unit(0.3, 'cm'))
+  fig %>% ggsave(plot = ., file = "figures/TOC_lasange.png", width = 5,
+  height = 20,
+  units = "cm",
+  dpi = 300)
+} 
+```
+
+```{r}
+#| include: false
+if (re.read == 're read'){
+df_selected  %>% filter(!is.na(TOC) )%>% # create TOC and filter any variables where it does not exist
+  group_by(mvm_id) %>%  # group by mvm_id to remocve andy station where we don't have enough data points
+  filter(n() >= 50) %>%  
+  ungroup() %>%
+     select(mvm_id, TOC, sampling_date,x, stationName) %>% mutate(SiteID = as.factor(mvm_id))%>% pivot_longer(cols=c("TOC")) %>% 
+    screeningmodeling(values=value,
+                    datevar = sampling_date, 
+                    link = "identity", 
+                    conf.type = "conf",
+                    conf.level=0.95,
+                    beep = FALSE, 
+                    tdist = FALSE,
+                    autocor = TRUE,
+                    mvm_id,
+                    x,
+                    stationName) ->
+  trendplotdata_selected_TOC
+  trendplotdata_selected_TOC %>% left_join(coordinates) %>% saveRDS(., file = "data/trendplotdata_selected_TOC.rds")
+  }  else if (re.read == 're load') {
+    trendplotdata_selected_TOC <- readRDS( file = "data/trendplotdata_selected_TOC.rds")
+  }
+```
+
+```{r}
+#| include: false
+
+if (re.read != 're fig' & exists("trendplotdata_selected_TOC")){
+  fig <- trendplotdata_selected_TOC %>%plot_proportions()+ ggtitle("TOC") + 
+        theme(text=element_text(size=5), #change font size of all text
+        axis.text=element_text(size=5), #change font size of axis text
+        axis.title=element_text(size=6), #change font size of axis titles
+        plot.title=element_text(size=6.5), #change font size of plot title
+        legend.text=element_text(size=6), #change font size of legend text
+        legend.title=element_text(size=5)) 
+  fig %>% ggsave(file = "figures/TOC_proportion_selected.png", width = 10,
+  height = 6,
+  units = "cm",
+  dpi = 300) 
+}  
+```
+
+```{r}
+#| echo: false
+#| fig-cap: "Proportion plot of TOC trends across Sweden. Updated from Eklöf et al, 2020."
+#| fig-subcap:
+#|        - "Using all 316 stations that fit the selection criteria of 10+ years of TOC data and < 5 percent urban area."
+#|        - "Using 136 stations for which charge density was sucessfully calculated for."
+#| fig-alt: TOC proportion of trends plot.
+#| label: fig-TOC-prop1
+#| layout-ncol: 2
+knitr::include_graphics(path = c("figures/TOC_proportion.png","figures/TOC_proportion_selected.png"), error = FALSE)
+```
+
+```{r}
+#| include: false
+#Trend plot for TOC
+
+if (re.read != 're fig' & exists("trendplotdata_selected_TOC")){
+  fig <- trendplotdata_selected_TOC%>%plot_screeningtrends(y_id = mvm_id, sorting = -y) + ggtitle("TOC")+ xlab(NULL) + 
+        theme(text=element_text(size=5), #change font size of all text
+        axis.text=element_text(size=3), #change font size of axis text
+        axis.title=element_text(size=6), #change font size of axis titles
+        plot.title=element_text(size=6.5), #change font size of plot title
+        legend.text=element_text(size=3), #change font size of legend text
+        legend.title=element_text(size=3.5),
+        legend.key.size = unit(0.3, 'cm'))
+  fig %>% ggsave(plot = ., file = "figures/TOC_lasange_selected.png", width = 5,
+  height = 20,
+  units = "cm",
+  dpi = 300)
+} 
+```
+```{r}
+#| echo: false
+#| fig-cap: "Lasange plot of TOC trends across Sweden. Updated from Eklöf et al, 2020. Using 136 stations for which charge density was sucessfully calculated for."
+#| fig-subcap:
+#|        - "Using all 316 stations that fit the selection criteria of 10+ years of TOC data and < 5 percent urban area."
+#|        - Using 136 stations for which charge density was sucessfully calculated for.
+#| fig-alt: TOC proportion of trends plot.
+#| label: fig-TOC-lasnage
+#| layout-ncol: 2
+knitr::include_graphics(path = c("figures/TOC_lasange.png","figures/TOC_lasange_selected.png"), error = FALSE)
+```
+
+:::
+
+---
+
+## Methodology
 The following steps were performed to get final values of charge density (charge per mg of carbon). 
 
 1.  Raw water chemistry downloaded from the MVM database, for all streams in the database that had at least 10 years of continuous monthly sampling of TOC in the period 1990-2023. 
@@ -26,18 +459,23 @@ The following steps were performed to get final values of charge density (charge
 3. Modelling of DOC charge density in Visual Minteq by sweeping through the ADOM/DOC parameter for each sample, calculating charge difference for each ADOM/DOC. 
 4. Processing of Visual Minteq output to find the ADOM/DOC that best models the chemical equiblirum for each sample with the smallest charge difference and use it to calculate the charge density of each sample.
 5. Collection of catchment characteristics of the stations. 
-6. Statistical Analysis looking at both spatial and temporal variatioon of DOC charge density across the dataset.  
+6. Statistical Analysis looking at both spatial and temporal variation of DOC charge density across the dataset.  
+
+---
 
 # Data source
 
-- Downloaded 142 000 samples from [MVM Database](https://miljodata.slu.se/MVM/)
+
+- Downloaded 114 320 samples from [MVM Database](https://miljodata.slu.se/MVM/)
 - Stations were preselected for streams that had TOC sampled 10 times a year for at least 10 consecutive years since 1990. 
-- Stations with more than 5% Urban area were excluded from the downloading. 
-- Data for 316 stations were downloaded of these 126 were used in the end as they had data from SLU's lab and could be sufficiently modelled and are shown on a map @fig-map-stations, while the number of samples available are shown in @fig-hist_stations.
+- Stations with more than 5% Urban area were excluded from the download. 
+- Data for 316 stations were downloaded of these 136 were used in the end as they had data from SLU's lab and could be sufficiently modelled using Visual Minteq and are shown on a map @fig-map-stations, while the number of samples available are shown in @fig-hist_stations.
  
 
-```{python map of stations}
+```{python }
+#| echo: false
 #| jupyter_compat: true
+#| eval: false
 import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point
@@ -72,15 +510,12 @@ lakes_gdf = lakes_gdf.to_crs("EPSG:4326")
 lakes_geojson = lakes_gdf.__geo_interface__
 
 
-
-
-
 # Extract coordinates from the GeoDataFrame for Plotly
 stations_gdf = stations_gdf.to_crs("EPSG:4326")
 stations_gdf["lon"] = stations_gdf.geometry.x
 stations_gdf["lat"] = stations_gdf.geometry.y
 stations_gdf["area_km2"] = stations_gdf["area_ARO_m2"] / (1000000)
-stations_gdf["org_charge_eq_g_C"] = stations_gdf["org_charge_eq_mg_C"] * 1000
+#stations_gdf["org_charge_eq_g_C"] = stations_gdf["org_charge_eq_mg_C"] * 1000
 # Convert Sweden boundary GeoDataFrame to GeoJSON for base map overlay
 
 
@@ -133,46 +568,40 @@ map_stations().write_html("../results/reports/maps/map_stations.html", full_html
 
 
 ```{r}
-#| cache: false
+#| echo: false
 #| fig-cap: Stations with available data that were sucessfully modelled in this study
-#| fig-alt: Map of stations.
+#| fig-alt: Map of stations
 #| label: fig-map-stations
 #| fig-height: 8
 htmltools::includeHTML("../results/reports/maps/map_stations.html")
 ```
+
+---
+
 # Preprocessing
 
-- 42 907 samples across 187 stations
+- 42 907 samples across 187 stations meet the requirments for Visual Minteq.
 - Median number of samples per station: 208
-- Removed all samples that were not analyzed in the SLU lab (some samples did not have tthe field analysis lab field filled in. These were also excluded.)
+- In addition we removed all samples that were not analyzed in the SLU lab (some samples did not have the field analysis lab field filled in. These were also excluded.) 
 
 ```{r}
-#| echo: false
+#| echo: true
 #| fig-width: 5 
 #| fig-height: 4
 #| fig-cap: Histogram of number of samples per station used in further analysis. There are 42 907 samples across 187 stations. In further analysis only stations with more than 5 samples were considered, reducing the number of stations to 173.
 #| fig-alt: Histogram of number of samples per station
 #| label: fig-hist_stations 
+#| cache.refresh: true
 
 library(tidyverse)
 
 sample_ids <- read.csv("../results/chemistry/slu_sample_ids.csv") %>% rename(sample_id =`SLU_sampleId`) # these are all the smaple id's of samples that were analysed at the SLU lab
 data <- read.csv("../results/chemistry/complete.csv")
 mvm_ids <- unique(data$mvm_id)
-stations <- read.csv("../input/catchment_characteristics/catch_landuse(NMD).csv") %>% select(mvm_id, stationCoordinateX, stationCoordinateY, area_ARO_m2, stationName) 
+stations <- read.csv("../input/catchment_characteristics/catch_landuse(NMD).csv") %>% select(mvm_id, area_ARO_m2,stationCoordinateX, stationCoordinateY, stationName) %>% left_join(read.csv("../input/catchment_characteristics/catch_316_outlet_elevation.csv") %>%
+      rename(elevation = elev_utl) %>%
+      select(mvm_id, elevation))
 
-# Step 1: Count rows for each mvm_id
-mvm_counts <- data %>%
-  group_by(mvm_id) %>%
-  summarise(sample_count = n())
-
-# Step 2: Plot histogram of row counts
-ggplot(mvm_counts, aes(x = sample_count)) +
-  geom_histogram(binwidth = 12, fill = "skyblue", color = "black", alpha = 0.7) +
-  labs(title = "",
-       x = "Samples per station",
-       y = "Frequency") +
-  theme_minimal()
 
 # For all the labs, not applicable anymore 
 # data %>% select(mvm_id) %>%
@@ -181,6 +610,11 @@ ggplot(mvm_counts, aes(x = sample_count)) +
 #   slice(1) %>%             # take the first row of each group
 #   ungroup() %>% left_join(stations) %>% left_join(mvm_counts) %>% filter(sample_count >= 5) -> stations_all
 
+# Step 1: Count rows for each mvm_id
+mvm_counts <- data %>%
+  group_by(mvm_id) %>%
+  summarise(sample_count = n())
+  
 # Lets have a look at the stations when we exclude the samples that are not measured at SLU
 data %>% filter(sample_id %in% sample_ids$sample_id)%>% select(mvm_id) %>%
   group_by(mvm_id) %>%
@@ -192,6 +626,18 @@ data %>% filter(sample_id %in% sample_ids$sample_id)%>% select(mvm_id) %>%
 mvm_ids <- stations$mvm_id
 
 data %>% filter(mvm_id %in% mvm_ids) -> data
+
+data %>% mutate(EC_mS_m = coalesce(Kond_25_mSm, Kond_mSm, Kond_20_mSm, NA))-> data
+
+
+
+# Step 2: Plot histogram of row counts
+ggplot(mvm_counts, aes(x = sample_count)) +
+  geom_histogram(binwidth = 12, fill = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "",
+       x = "Samples per station",
+       y = "Frequency") +
+  theme_minimal()
 ```
 
 # Visual Minteq
@@ -228,7 +674,7 @@ data %>% filter(mvm_id %in% mvm_ids) -> data
 - pH 5.6
 - Ferrihydrite as possible solid phase
 - AlOH3 as possible solid phase
-- ADMO/DOC sweep from 0.05 to 3.5
+- ADOM/DOC sweep from 0.05 to 3.5
 - alkalinity/acidity was added as Na and Cl concentration respectively. 
 
 ---
@@ -241,6 +687,10 @@ $$
 \text{Charge difference (\%)} = 100 \times \left| \frac{\text{SumA} - \text{SumC}}{\text{SumA} + \text{SumC}} \right|
 $$
 
+
+Visual Minteq uses ADOM/DOC to model the charge on the organic matter for each sample. Once the ADOM/DOC was determined for each sample the corresponding organic charge was used to calculate the charge density.
+
+
 :::panel-tabset
 
 #### ADOM/DOC
@@ -251,6 +701,7 @@ $$
 #| fig-subcap:
 #|    - Before filtering of charge difference < 0.5%
 #|    - After filtering of charge difference < 0.5%
+#| layout-ncol: 2
 
 ggplot(data, aes(x = adom_doc)) +
   geom_histogram(binwidth = 0.05, fill = "skyblue", color = "black", alpha = 0.7) +
@@ -269,6 +720,12 @@ ggplot(data %>% filter(abs(charge_diff) < 0.5), aes(x = adom_doc)) +
 
 #### Charge density
 
+Charge density was calculated using the organic charge of the best fit ADOM/DOC for each sample and the concentration of TOC of the sample.
+
+$$
+\text{Charge density (eq/mg C)} = \left| \frac{\text{organic charge (eq/l)}}{\text{TOC (mg/l)}} \right|
+$$
+
 ```{r}
 #| fig-cap: Histogram of charge density for samples before and after filtering. 
 #| fig-alt: Histogram of charge density.
@@ -276,7 +733,7 @@ ggplot(data %>% filter(abs(charge_diff) < 0.5), aes(x = adom_doc)) +
 #| fig-subcap:
 #|    - Before filtering of charge difference < 0.5%
 #|    - After filtering of charge difference < 0.5%
-
+#| layout-ncol: 2
 ggplot(data, aes(x = org_charge_eq_mg_C)) +
   geom_histogram(fill = "skyblue", color = "black", alpha = 0.7) +
   labs(title = "",
@@ -328,9 +785,10 @@ landuse <- read.csv("../input/catchment_characteristics/PLC8_landuse.csv") %>% f
 #| fig-subcap:
 #|    - mean annual temperature
 #|    - total annual precipitation
-#| fig-alt: Histogram of charge density.
+#| fig-alt: Histogram of temp & precip.
+#| layout-ncol: 2
 
-climate <- read.csv("../input/climate/daily_climate.csv") %>% filter(mvm_id %in% mvm_ids) %>% mutate(date = as.Date(time), year = year(date)) %>% filter (year >= 1990)  %>% group_by(mvm_id, year) %>% summarize(mean_annual_temp = mean(tas_avg), annual_precip= sum(pr_avg)) %>% ungroup() %>% group_by(mvm_id) %>% summarize(mean_annual_temp = mean(mean_annual_temp), annual_precip= mean(annual_precip)) %>% ungroup() %>% mutate(mvm_id = as.factor(mvm_id))
+climate <- read.csv("../input/climate/daily_climate.csv") %>% filter(mvm_id %in% mvm_ids) %>% mutate(date = as.Date(time), year = year(date)) %>% filter (year >= 1990)  %>% group_by(mvm_id, year) %>% summarise(mean_annual_temp = mean(tas_avg), annual_precip= sum(pr_avg)) %>% ungroup() %>% group_by(mvm_id) %>% summarise(mean_annual_temp = mean(mean_annual_temp), annual_precip= mean(annual_precip)) %>% ungroup() %>% mutate(mvm_id = as.factor(mvm_id))
 
 ggplot(climate, aes(x = mean_annual_temp)) +
   geom_histogram(fill = "skyblue", color = "black", alpha = 0.7) +
@@ -346,6 +804,57 @@ ggplot(climate, aes(x = annual_precip)) +
        y = "Frequency") +
   theme_minimal()
 ```
+```{r}
+
+climate_p1 <- read.csv("../input/climate/daily_climate.csv") %>% filter(mvm_id %in% mvm_ids) %>% mutate(date = as.Date(time), year = year(date)) %>% filter (year >= 1990 & year < 1998)  %>% group_by(mvm_id, year) %>% summarise(mean_annual_temp = mean(tas_avg), annual_precip= sum(pr_avg)) %>% ungroup() %>% group_by(mvm_id) %>% summarise(mean_annual_temp = mean(mean_annual_temp), annual_precip= mean(annual_precip)) %>% ungroup() %>% mutate(mvm_id = as.factor(mvm_id)) %>% mutate(period = "1990-1997")
+
+climate_p2 <- read.csv("../input/climate/daily_climate.csv") %>% filter(mvm_id %in% mvm_ids) %>% mutate(date = as.Date(time), year = year(date)) %>% filter (year >= 1998 & year < 2012)   %>% group_by(mvm_id, year) %>% summarise(mean_annual_temp = mean(tas_avg), annual_precip= sum(pr_avg)) %>% ungroup() %>% group_by(mvm_id) %>% summarise(mean_annual_temp = mean(mean_annual_temp), annual_precip= mean(annual_precip)) %>% ungroup() %>% mutate(mvm_id = as.factor(mvm_id)) %>% mutate(period = "1998-2011")
+
+climate_p3 <- read.csv("../input/climate/daily_climate.csv") %>% filter(mvm_id %in% mvm_ids) %>% mutate(date = as.Date(time), year = year(date)) %>% filter (year >= 2012 & year < 2025)  %>% group_by(mvm_id, year) %>% summarise(mean_annual_temp = mean(tas_avg), annual_precip= sum(pr_avg)) %>% ungroup() %>% group_by(mvm_id) %>% summarise(mean_annual_temp = mean(mean_annual_temp), annual_precip= mean(annual_precip)) %>% ungroup() %>% mutate(mvm_id = as.factor(mvm_id)) %>% mutate(period = "2012-2024")
+
+climate_all <- bind_rows(climate_p1, climate_p2, climate_p3)
+
+# Reshape the data to long format
+climate_long <- climate_all %>%
+  pivot_longer(cols = c(mean_annual_temp, annual_precip),
+               names_to = "variable", values_to = "value")
+
+# Create boxplots with separate panels
+# ggplot(climate_long, aes(x = period, y = value, fill = period)) +
+#   geom_boxplot() +
+#   facet_wrap(~ variable, scales = "free_y") +
+#   labs(title = "Boxplots of Climate Variables Across Periods",
+#        x = "Period", y = "Value") +
+#   theme_minimal()
+
+
+library(ggpubr)
+
+
+my_comparisons <- list( c("1990-1997", "1998-2011"), c("1998-2011", "2012-2024"), c("1990-1997", "2012-2024") )
+
+```
+
+```{r}
+#| eval: true
+#| fig-cap: Boxplots of climate variables for the three periods 1990-1997, 1998-2011, 2012-2024.
+#| label: fig-climate-periods 
+#| fig-subcap:
+#|    - Change in mean annual temperature for the three periods. Temperature was not significantly differnt in the three periods
+#|    - Change in annual precipitation for the three periods 1990-1997, 1998-2011, 2012-2024. 1998-2011 was found to be significantly higher in precipitation than the earlier and later periods. 
+#| fig-alt: Climate change in the three periods.
+#| layout-ncol: 2
+ggboxplot(climate_all ,x = "period", y = "mean_annual_temp",
+          color = "period", palette = "jco")+ 
+  stat_compare_means(comparisons = my_comparisons, paired = TRUE)+ # Add pairwise comparisons p-value
+  stat_compare_means(label.y = 13) 
+
+ggboxplot(climate_all ,x = "period", y = "annual_precip",
+          color = "period", palette = "jco")+ 
+  stat_compare_means(comparisons = my_comparisons, paired = TRUE)+ # Add pairwise comparisons p-value
+  stat_compare_means(label.y = 1650) 
+```
+
 
 #### Discharge
 
@@ -360,8 +869,8 @@ Area proportional discharge calculated for each station, using the local dischar
 #| fig-subcap:
 #|    - Boxplot of all the catchments together.
 #|    - Example of median annual discharge for 4 different catchments.
-#
-discharge <- read.csv("../input/discharge/daily_discharge.csv") %>% filter(mvm_id %in% mvm_ids) %>% mutate(date = as.Date(Datum), year = year(date)) %>% group_by(mvm_id, year) %>% summarize(median_q_m3_s = median(q), p25_q_m3_s  = quantile(q, probs = 0.25, na.rm = TRUE) , p75_q_m3_s = quantile(q, probs = 0.75, na.rm = TRUE)) %>% ungroup() %>% left_join(stations)%>% mutate(mvm_id = as.factor(mvm_id)) 
+#| layout-ncol: 2
+discharge <- read.csv("../input/discharge/daily_discharge.csv") %>% filter(mvm_id %in% mvm_ids) %>% mutate(date = as.Date(Datum), year = year(date)) %>% group_by(mvm_id, year) %>% summarise(median_q_m3_s = median(q), p25_q_m3_s  = quantile(q, probs = 0.25, na.rm = TRUE) , p75_q_m3_s = quantile(q, probs = 0.75, na.rm = TRUE)) %>% ungroup() %>% left_join(stations)%>% mutate(mvm_id = as.factor(mvm_id)) 
 
 ggplot(discharge, aes(group = year, x = year, y = log(median_q_m3_s))) +
 geom_boxplot()
@@ -374,13 +883,207 @@ discharge %>% mutate(q_spec= (median_q_m3_s / area_ARO_m2)*1000, p25_spec = (p25
 group_by(mvm_id) %>% summarise(
     mean_Q_spec = mean(q_spec), p25_Q_spec = mean(p25_spec), p75_Q_spec = mean(p75_spec), mean_Q = mean(median_q_m3_s)) %>% ungroup() -> discharge_y
 ```
+```{r}
+#| fig-cap: Change in discharge for the three periods 1990-1997, 1998-2011, 2012-2024.
+#| label: fig-discharge-periods 
+#| fig-subcap:
+#|    - mean annual discharge
+#|    - 25% discharge
+#|    - 75% discharge
+#| fig-alt: Climate change in the three periods.
+#| layout-ncol: 2
+discharge %>% mutate(q_spec= (median_q_m3_s / area_ARO_m2)*1000, p25_spec = (p25_q_m3_s / area_ARO_m2)*1000, p75_spec = (p75_q_m3_s / area_ARO_m2)*1000 ) %>% filter((year >= 1990 & year < 1998) ) %>%
+group_by(mvm_id) %>% summarise(
+    log_mean_Q_spec = mean(log(q_spec)), log_p25_Q_spec = mean(log(p25_spec)), log_p75_Q_spec = mean(log(p75_spec)), log_mean_Q = mean(log(median_q_m3_s)))  %>% ungroup() %>% mutate(period = "1990-1997") -> discharge_p1
+
+discharge %>% mutate(q_spec= (median_q_m3_s / area_ARO_m2)*1000, p25_spec = (p25_q_m3_s / area_ARO_m2)*1000, p75_spec = (p75_q_m3_s / area_ARO_m2)*1000 ) %>% filter((year >= 1998 & year < 2012) ) %>%
+group_by(mvm_id) %>% summarise(
+    log_mean_Q_spec = mean(log(q_spec)), log_p25_Q_spec = mean(log(p25_spec)), log_p75_Q_spec = mean(log(p75_spec)), log_mean_Q = mean(log(median_q_m3_s)))  %>% mutate(period = "1998-2011") -> discharge_p2
+
+discharge %>% mutate(q_spec= (median_q_m3_s / area_ARO_m2)*1000, p25_spec = (p25_q_m3_s / area_ARO_m2)*1000, p75_spec = (p75_q_m3_s / area_ARO_m2)*1000 ) %>% filter((year >= 2012 & year < 2024) ) %>%
+group_by(mvm_id) %>% summarise(
+    log_mean_Q_spec = mean(log(q_spec)), log_p25_Q_spec = mean(log(p25_spec)), log_p75_Q_spec = mean(log(p75_spec)), log_mean_Q = mean(log(median_q_m3_s))) %>% ungroup() %>% mutate(period = "2012-2024") -> discharge_p3
+
+
+discharge_all <- bind_rows(discharge_p1, discharge_p2, discharge_p3)
+
+# Reshape the data to long format
+discharge_long <- discharge_all %>%
+  pivot_longer(cols = c(log_mean_Q_spec ,log_p25_Q_spec, log_mean_Q),
+               names_to = "variable", values_to = "value")
+
+# Create boxplots with separate panels
+ggplot(discharge_long, aes(x = period, y = value, fill = period)) +
+  geom_boxplot() +
+  facet_wrap(~ variable, scales = "free_y") +
+  labs(title = "Boxplots of Climate Variables Across Periods",
+       x = "Period", y = "Value") +
+  theme_minimal()
+
+
+library(ggpubr)
+
+
+# my_comparisons <- list( c("1990-1997", "1998-2011"), c("1998-2011", "2012-2024"), c("1990-1997", "2012-2024") )
+# ggboxplot(discharge_all ,x = "period", y = "log_p25_Q_spec",
+#           color = "period", palette = "jco")+ 
+#   stat_compare_means(comparisons = my_comparisons, paired = TRUE)+ # Add pairwise comparisons p-value
+#   stat_compare_means(label.y = -4)     # Add global p-value
+
+# ggboxplot(discharge_all ,x = "period", y = "log_mean_Q_spec",
+#           color = "period", palette = "jco") + 
+#   stat_compare_means(comparisons = my_comparisons, paired = TRUE)+ # Add pairwise comparisons p-value
+#   stat_compare_means(label.y = -4) 
+
+# ggboxplot(discharge_all ,x = "period", y = "log_mean_Q",
+#           color = "period", palette = "jco") + 
+#   stat_compare_means(comparisons = my_comparisons, paired = TRUE)+ # Add pairwise comparisons p-value
+#   stat_compare_means(label.y = 11) 
+```
+
+
+<!-- https://www.datanovia.com/en/lessons/friedman-test-in-r/ -->
+```{r}
+#| eval: false
+library(rstatix)
+
+friedman.test(log_mean_Q ~ period | mvm_id, data = discharge_all)
+
+friedman_effsize(log_mean_Q ~ period | mvm_id, data = discharge_all)
+
+discharge_all
+
+pwc <- discharge_all %>%
+  wilcox_test(log_mean_Q ~ period, paired = TRUE, p.adjust.method = "bonferroni")
+```
+
+
+```{python}
+#| jupyter_compat: true
+#| eval: false
+import pandas as pd
+import geopandas as gpd
+from shapely.geometry import Point
+import plotly.express as px
+import plotly.io as pio
+
+# import plotly.io as pio
+# pio.renderers.default = "plotly_mimetype+notebook_connected"
+
+# Path to the CSV file
+file_path = "../results/r_py/pls_input.csv"
+
+# # Load the CSV file into a DataFrame
+df = pd.read_csv(file_path)
+
+
+# Step 2: Convert to GeoDataFrame with SWEREF 99TM CRS
+geometry = [Point(xy) for xy in zip(df["stationCoordinateX"], df["stationCoordinateY"])]
+stations_gdf = gpd.GeoDataFrame(df, geometry=geometry, crs="EPSG:3006")  # SWEREF 99TM CRS
+
+# Step 3: Load Sweden shapefile and ensure it's in SWEREF 99TM
+sweden_shapefile = "../input/shapefiles/Sweden.zip"
+sweden_gdf = gpd.read_file(f"zip://{sweden_shapefile}")
+
+sweden_gdf = sweden_gdf.to_crs("EPSG:4326")
+sweden_geojson = sweden_gdf.__geo_interface__
+
+lakes_shapefile = "../input/shapefiles/Swedish_Lakes.zip"
+lakes_gdf = gpd.read_file(f"zip://{lakes_shapefile}")
+
+lakes_gdf = lakes_gdf.to_crs("EPSG:4326")
+lakes_geojson = lakes_gdf.__geo_interface__
+
+
+# Extract coordinates from the GeoDataFrame for Plotly
+stations_gdf = stations_gdf.to_crs("EPSG:4326")
+stations_gdf["lon"] = stations_gdf.geometry.x
+stations_gdf["lat"] = stations_gdf.geometry.y
+stations_gdf["area_km2"] = stations_gdf["area_ARO_m2"] / (1000000)
+#stations_gdf["org_charge_eq_g_C"] = stations_gdf["org_charge_eq_mg_C"] * 1000
+# Convert Sweden boundary GeoDataFrame to GeoJSON for base map overlay
+
+
+def map_stations():
+  # Create an interactive map
+  fig = px.scatter_map(
+      stations_gdf,
+      lat="lat",
+      lon="lon",
+      color="mean_Q_spec",  # Column to determine color
+      color_continuous_scale="Viridis",  # Color scale (can be adjusted)
+      zoom=3.5,  # Adjust zoom level as needed
+      map_style="white-bg",
+      title="Stations with more than 5 samples",
+      custom_data=['mvm_id', "stationName", "area_km2","mean_annual_temp", "annual_precip", "mean_Q_spec" ]
+  )
+
+  fig = fig.update_traces(hovertemplate="MMV ID:  %{customdata[0]} <br>Station name: %{customdata[1]} <br>Area (km2): %{customdata[2]:.0f} <br>MAT (C): %{customdata[3]:.2f} <br>Annual Precipitation (mm): %{customdata[4]:.0f} <br>Mean spec. discharge: %{customdata[5]:.4f}",
+  marker=dict(size=10))
+
+
+  fig.update_layout(
+      map={
+          "layers": [
+              {
+                  "source": sweden_geojson,
+                  "type": "line",
+                  "color": "black",
+                  "line": {"width": 1},
+              },
+              {
+                  "source": lakes_geojson,
+                  "type": "line",
+                  "color": "grey",
+                  "line": {"width": 1},
+              }
+          ]
+      },
+      title={"x": 0.5},
+      width=500,  # Set width of the plot
+      height=600,  # Center the title
+      margin={"r": 0, "t": 40, "l": 0, "b": 0},  # Adjust margins
+  )
+
+  return(fig)
+
+map_stations().write_html("../results/reports/maps/map_discharge.html", full_html= False,include_plotlyjs = True )
+```
+
+
+```{r}
+#| fig-cap: Specific discharge of stations included in this study. 
+#| fig-alt: Map of discharge.
+#| label: fig-map-discharge
+#| fig-height: 8
+#| cache.refresh: true
+htmltools::includeHTML("../results/reports/maps/map_discharge.html")
+```
 
 #### NDVI
 
 [NDVI](https://www.usgs.gov/landsat-missions/landsat-normalized-difference-vegetation-index)
 
-Extracted using GGE for monthly time series for each catchment of median NDVI from the Landcare compiled NDVI images. These are taken at a 8 interval since before 1990 using 4 different landsat sattelites. The compiled dataset was used as NDVI data was preprocessed and alignesd between the different sattelites.
+Extracted using GGE for monthly time series for each catchment of median NDVI from the Landcare compiled NDVI images. These are taken at a 8 day interval since before 1990 using 4 different landsat sattelites. The compiled dataset was used as NDVI data was preprocessed and alignesd between the different sattelites.
 
+```{r}
+#| eval: false
+
+# this is the code for aggregating all the NDVI files for each catchment and putting it into a single file. 
+
+folder_path <- '/mnt/c/Temp/Offline_temp/NDVI_Results_individual'
+
+csv_files <- list.files(path = folder_path, pattern = "\\.csv$", full.names = TRUE)
+
+# Read and combine all CSV files into one data frame
+combined_df <- csv_files %>%
+  map_dfr(read_csv)
+
+# Print the first few rows of the combined data frame
+print(head(combined_df))
+
+combined_df %>% write.csv(file = "../input/catchment_characteristics/NDVI.csv", row.names = FALSE)
+```
 
 ```{r}
 #| fig-cap: Summer NDVI June-August for all catchments in the DOC dissociation study. 
@@ -389,9 +1092,9 @@ Extracted using GGE for monthly time series for each catchment of median NDVI fr
 #| fig-subcap:
 #|    - Boxplot of all the catchments together.
 #|    - Example of summer NDVI for 4 different catchments.
+#| cache.refresh: false
 
-
-ndvi <- read.csv("../input/catchment_characteristics/NDVI.csv")  %>% filter(mvm_id %in% mvm_ids) %>% mutate(date = make_date(year,month,15)) %>% filter (month %in% c(6,7,8)) %>% group_by(mvm_id, year) %>% summarize(summer_NDVI = mean(NDVI_median, na.rm = TRUE)) %>% ungroup() %>% mutate(mvm_id = as.factor(mvm_id)) 
+ndvi <- read.csv("../input/catchment_characteristics/NDVI.csv")  %>% filter(mvm_id %in% mvm_ids) %>% mutate(date = make_date(year,month,15)) %>% filter (month %in% c(6,7,8)) %>% group_by(mvm_id, year) %>% summarise(summer_NDVI = mean(NDVI_median, na.rm = TRUE)) %>% ungroup() %>% mutate(mvm_id = as.factor(mvm_id)) 
 
 ggplot(ndvi, aes(group = year, x = year, y = summer_NDVI)) +
 geom_boxplot()
@@ -399,14 +1102,43 @@ geom_boxplot()
 ggplot(ndvi %>% filter (mvm_id %in% c(21, 180,33,222 )), aes( x = year, y = summer_NDVI, color = mvm_id)) +
 geom_line()
 
-ndvi_y <- ndvi %>% group_by(mvm_id)%>% summarize(summer_NDVI = mean(summer_NDVI, na.rm = TRUE)) %>% ungroup()
+ndvi_y <- ndvi %>% group_by(mvm_id)%>% summarise(summer_NDVI = mean(summer_NDVI, na.rm = TRUE)) %>% ungroup()
 ```
+
+```{r}
+#| fig-cap: Summer NDVI June-August for all catchments in the DOC dissociation study for the periods 1990-1997, 1998-2011, 2012-2024. 
+#| fig-alt: NDVI comparison.
+#| label: fig-ndvi.comp
+#| cache.refresh: false
+
+ndvi  %>% filter((year >= 1990 & year < 1998) ) %>%
+group_by(mvm_id) %>% summarise(summer_NDVI = mean(summer_NDVI, na.rm = TRUE))  %>% ungroup() %>% mutate(period = "1990-1997") -> ndvi_p1
+
+ndvi  %>% filter((year >= 1998 & year < 2012) ) %>%
+group_by(mvm_id) %>% summarise(summer_NDVI = mean(summer_NDVI, na.rm = TRUE))  %>% mutate(period = "1998-2011") -> ndvi_p2
+
+ndvi %>%  filter((year >= 2012 & year < 2024) ) %>%
+group_by(mvm_id) %>% summarise(summer_NDVI = mean(summer_NDVI, na.rm = TRUE)) %>% ungroup() %>% mutate(period = "2012-2024") -> ndvi_p3
+
+ndvi_periods <- rbind(ndvi_p1, ndvi_p2, ndvi_p3)
+
+library(ggpubr)
+
+
+my_comparisons <- list( c("1990-1997", "1998-2011"), c("1998-2011", "2012-2024"), c("1990-1997", "2012-2024") )
+
+ggboxplot(ndvi_periods %>% filter(mvm_id != 43) ,x = "period", y = "summer_NDVI",
+          color = "period", palette = "jco") + 
+  stat_compare_means(comparisons = my_comparisons, paired = TRUE)+ # Add pairwise comparisons p-value
+  stat_compare_means(label.y = 1.05)
+```
+
 
 #### Peat Area
 
 [SLU Peat Map](https://www.slu.se/en/environment/statistics-and-environmental-data/search-for-open-environmental-data/comprehensive-peat-map-of-the-forest-land/#downloadInfo)
 
-Peat is considered >30cm pead depth.  
+Peat is considered >30cm peat depth.  
 
 ```{r}
 #| fig-cap: Peat area data from the slu peat map. 
@@ -430,14 +1162,13 @@ ggplot(df_long, aes(x = Variable, y = Value, fill = Variable)) +
     x = "Variable",
     y = "% cover"
   ) 
-
 ```
 
 :::
 
 ## Summary
 
-Most are given as the persenctage of the area in the catchment covered by the specific data source. Exeptions are:  
+Most are given as the percenctage of the area in the catchment covered by the specific data source. Exeptions are:  
 
 - Temperature i.e. MAT (mean annual average in °C)
 - Discharge (annual and interquantile range average m3/s)
@@ -446,7 +1177,10 @@ Most are given as the persenctage of the area in the catchment covered by the sp
 
 
 ```{r}
-# library(kableextra)
+#| cache.refresh: true
+#| label: tbl-catch_char
+#| tbl-cap: Catchment characteristics for the stations used in this study.
+
 catch_char <- landuse %>% 
         left_join(peat %>% select(-water), by = join_by(mvm_id)) %>%
         left_join(soil_depth, by = join_by(mvm_id)) %>%
@@ -463,21 +1197,230 @@ sumtable(catch_char %>% select(-mvm_id), out ="kable", digits = 3)
 
 ---
 
+# Water Chemistry
+
+In this section we test for normality of the data, compare the variation within stations and between stations and look at correlations betweeen the different water chemistry variables. For this we use the data of the 126 stations for which we sucessfully modelled organic charge. 
+
+```{r}
+#| cache.refresh: true
+data %>% filter(abs(charge_diff) < 0.5) %>% mutate(sVISa = Abs_F420_5cm/(TOC_mol*12.01*1000)) -> data
+data %>% mutate(year = year(sampling_date), TOC_mg_l = TOC_mol*12.01*1000, org_charge_density_meq_g_C = org_charge_eq_mg_C * 1000*1000) %>% select(year,EC_mS_m, sVISa,org_charge_density_meq_g_C,TOC_mg_l,SO4_mol,Alk_Acid_mol, sampling_date, Abs_F420_5cm, mvm_id, adom_doc, charge_diff, org_charge, Sum.of.cations, pH_, Ionic.strength, sample_id) -> data_1
+```
+
+```{r}
+#| cache.refresh: true
+#| label: tbl-chemistry
+#| tbl-cap: Water chemistry values measured and modelled for the stations used in this study.
+#| 
+library(vtable)
+
+sumtable(data_1)
+```
+
+::: panel-tabset
+
+## Normality
+
+Here we plot the histogram and Q-Q plots for the main water chemistry parameters. 
+
+```{r}
+plot_norm <- function(var, name = "Variable", breaks = 100){
+  hist(var, breaks = breaks, main = "", xlab = name)
+  qqnorm(var, main = "")
+  qqline(var)
+}
+```
+
+::: panel-tabset
+
+### sVISa
+
+```{r}
+#| fig-cap: sVISA distribution
+#| fig-subcap:
+#|        - "Histogram of sVISa"
+#|        - "QQ-plot"
+#| label: fig-norm-sVISa
+#| layout-ncol: 2
+plot_norm(data_1$sVISa, name = "sVISa")
+```
+
+### TOC
+
+TOC is not normally distributed, though I would say when log transformed it is close enough to a normal distribution to warrant a parametric test.
+
+```{r}
+#| fig-cap: TOC distribution
+#| fig-subcap:
+#|        - "Histogram of TOC"
+#|        - "QQ-plot"
+#| label: fig-norm-TOC
+#| layout-ncol: 2
+plot_norm(data_1$TOC_mg_l, name = "TOC (mg/l)")
+```
+```{r}
+#| fig-cap: Log TOC distribution
+#| fig-subcap:
+#|        - "Histogram of log(TOC)"
+#|        - "QQ-plot"
+#| label: fig-norm-logTOC
+#| layout-ncol: 2
+plot_norm(log(data_1$TOC_mg_l), name = "log TOC (mg/l)")
+```
+### Organic charge density
+
+For organic charge density I would also say that although it is not perfectly normally distributed I would say its close enough to a normal distribution that a parametric test is acceptable. Though a non-parametric test is also a good option. 
+
+```{r}
+#| fig-cap: Organic charge density distribution
+#| fig-subcap:
+#|        - "Histogram of Organic charge density"
+#|        - "QQ-plot"
+#| label: fig-norm-org-density
+#| layout-ncol: 2
+plot_norm(data_1$org_charge_density_meq_g_C, name = "Organic charge density (meq/g of C)")
+```
+
+```{r}
+#| fig-cap: Logged Organic charge density distribution
+#| fig-subcap:
+#|        - "Histogram of log(Organic charge density)"
+#|        - "QQ-plot"
+#| label: fig-norm-org-density-log
+#| layout-ncol: 2
+plot_norm(log(-data_1$org_charge_density_meq_g_C), name = "log (Organic charge density (meq/g of C))")
+```
+
+### Conclusion
+
+I would have said that they are all pretty close to normal distribution as long as we use log(TOC). They are not perfect though so a non-parametric test is also a good option to be safe. Since we have previously looked at this with Ted and agreed with him that a non-parametric test is appropriate I will go on using non-parametric tests and consider these not normally distributed. 
+
+:::
+
+
+
+## Variation Comparison
+```{r}
+library(ggplot2)
+library(tidyr)
+
+plot_variable_distribution <- function(data, variable_name) {
+  # Dynamically evaluate the variable column from the data
+  aggregated_data <- aggregate(
+    reformulate("mvm_id", variable_name),  # Use reformulate for dynamic column names
+    data,
+    function(x) {
+      c(
+        median = median(x, na.rm = TRUE),
+        iqr = quantile(x, 0.75, na.rm = TRUE) - quantile(x, 0.25, na.rm = TRUE)
+      )
+    }
+  )
+  
+  # Convert list columns into separate data frame columns
+  aggregated_data <- do.call(data.frame, aggregated_data)
+  names(aggregated_data) <- c("mvm_id", "median", "iqr")
+  
+  # Reshape the data to long format for ggplot
+  long_data <- pivot_longer(
+    aggregated_data,
+    cols = c("median", "iqr"),
+    names_to = "statistic",
+    values_to = "value"
+  )
+  
+  # Plot both distributions with a legend
+  ggplot(long_data, aes(x = value, fill = statistic, color = statistic)) +
+    geom_density(alpha = 0.4) +  # Transparency for overlapping areas
+    labs(
+      x = variable_name,
+      y = "Density",
+      fill = "Statistic",  # Legend title for the fill aesthetic
+      color = "Statistic"  # Legend title for the color aesthetic
+    ) +
+    scale_fill_manual(values = c("lightblue", "orange")) +  # Custom colors
+    scale_color_manual(values = c("blue", "darkorange")) +
+    theme_minimal()
+}
+```
+
+```{r}
+#| fig-cap: Comparison of the distribution of median values for each stations (blue) and inter quantile range (IQR, orange) for each station.
+#| fig-subcap:
+#|      - "sVISa median and IQR distributions"
+#|      - "TOC median and IQR distributions"
+#|      - "Organic charge density median and IQR distributions"
+#|      - "Organic charge median and IQR distribution (in mol of charge per litre)"
+#| label: fig-variation
+#| layout-ncol: 2
+
+plot_variable_distribution(data_1, "sVISa")
+plot_variable_distribution(data_1, "TOC_mg_l")
+plot_variable_distribution(data_1, "org_charge_density_meq_g_C")
+plot_variable_distribution(data_1, "org_charge")
+```
+
+**So how big are these changes in charge density?**
+
+
+```{r}
+median_mg_TOC <- median(data$TOC_mol) *12.01 *1000 
+median_charge_density <- median(data$org_charge_eq_mg_C)
+
+median_organic_charge_meq <- median_charge_density * median_mg_TOC *1000
+
+sd_organic_charge_meq <- sd(data$org_charge_eq_mg_C) * median_mg_TOC *1000
+```
+
+Taking the mean TOC concentration and median organic charge density of all samples we get a median organic charge of `{r} round(median_organic_charge_meq, digits = 3)` meq/l using the standard deviation of organic charge density and the median toc concentration we then get a standard deviation of organi charge of `{r} round(sd_organic_charge_meq, digits = 3)` meq/l. 
+
+
+## Correlations
+
+```{r}
+#| fig-cap: "Correlation matrix using spearman (non-parametric) correlation to calculate correlation and significance of p < 0.05. Crossed out field indicate no significant correlation with p > 0.05. The area and color of the circle indicate the correlation coefficent."
+#| label: fig-corrmatrix
+#| fig-heigth: 12
+
+library(corrplot)
+library(Hmisc)
+
+res2 <- rcorr(as.matrix(data_1 %>% select(-c(sampling_date, sample_id, mvm_id))), type = c("spearman"))
+
+diag(res2$P) <- 0 # fill in the diagonal with 0 (perfect siginficance)
+
+corrplot(res2$r, order="hclust", type = 'upper', p.mat = res2$P,sig.level = 0.05, insig = "pch", tl.col = "black", method = 'pie', outline = 'white')
+```
+
+:::
+---
+
 # Temporal Patters
 
 For each individual catchemnt split into three time periods, has to have at least 2 years samples in each time period for it to work. 
- 
+The three periods are: 
+
+- 1990-1997
+- 1998-2012
+- 2013-2024
+
+For each stations we split the data minto these three periods, then we test the data within each stations for changes between the periods using Kruskal-Wallis. 
+
+## Significant Testing
+
+
 ---
 
 # Spatial Patterns
 
-
+change to meadn where normally distributed.
 ```{r}
+#| cache.refresh: true
 # merge response and landuse as one dataframe called all
-all <- data %>% filter(abs(charge_diff) < 0.5) %>% mutate(sVISa = Abs_F420_5cm/(TOC_mol*12.01))%>%
- group_by(mvm_id) %>% summarise(org_charge_eq_mg_C = median(org_charge_eq_mg_C), mean_toc = median(TOC_mol), median_sVISa = median(sVISa, na.rm = TRUE)) %>%
+all <- data_1 %>%
+ group_by(mvm_id) %>% summarise(org_charge_meq_g_C = median(org_charge_density_meq_g_C), median_toc = median(TOC_mg_l), median_sVISa = median(sVISa, na.rm = TRUE)) %>%
  ungroup() %>% mutate(mvm_id = as_factor(mvm_id))%>% 
- select(mvm_id, org_charge_eq_mg_C, mean_toc, median_sVISa) %>%
+ select(mvm_id, org_charge_meq_g_C, median_toc, median_sVISa) %>%
  left_join(catch_char, by = join_by(mvm_id))
 
 all %>% write.csv("../results/r_py/pls_input.csv")
@@ -486,7 +1429,7 @@ all %>% write.csv("../results/r_py/pls_input.csv")
 ::: panel-tabset
 
 ```{python prep for maps}
-#| cache: false
+#| eval: true
 import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point
@@ -518,15 +1461,23 @@ stations_gdf = stations_gdf.to_crs("EPSG:4326")
 stations_gdf["lon"] = stations_gdf.geometry.x
 stations_gdf["lat"] = stations_gdf.geometry.y
 stations_gdf["area_km2"] = stations_gdf["area_ARO_m2"] / (1000000)
-stations_gdf["org_charge_eq_g_C"] = stations_gdf["org_charge_eq_mg_C"] * 1000
+#stations_gdf["org_charge_meq_mg_C"] = stations_gdf["org_charge_eq_mg_C"] * 1000
 # Convert Sweden boundary GeoDataFrame to GeoJSON for base map overlay
 sweden_geojson = sweden_gdf.__geo_interface__
+
+lakes_shapefile = "../input/shapefiles/Swedish_Lakes.zip"
+lakes_gdf = gpd.read_file(f"zip://{lakes_shapefile}")
+
+lakes_gdf = lakes_gdf.to_crs("EPSG:4326")
+lakes_geojson = lakes_gdf.__geo_interface__
 ```
 ## TOC
+
 ```{python}
 #| jupyter_compat: true
+#| eval: false
  
-stations_gdf["mean_toc_mg_l"] = stations_gdf["mean_toc"] * (12010)
+stations_gdf["median_toc_mg_l"] = stations_gdf["median_toc"] * (12010)
 
 def map_toc():
 # Create an interactive map
@@ -534,15 +1485,15 @@ def map_toc():
       stations_gdf,
       lat="lat",
       lon="lon",
-      color="mean_toc_mg_l",  # Column to determine color
+      color="median_toc_mg_l",  # Column to determine color
       color_continuous_scale="Viridis",  # Color scale (can be adjusted)
       zoom=3.5,  # Adjust zoom level as needed
       map_style="white-bg",
       title="TOC concentration",
-      custom_data= ['mvm_id', "mean_toc_mg_l", "area_km2", "stationName"]
+      custom_data= ['mvm_id', "median_toc_mg_l", "area_km2", "stationName"]
   )
 
-  fig.update_traces(hovertemplate="MMV ID:  %{customdata[0]} <br>TOC (mg C/l): %{customdata[1]:.6f} <br>Area: %{customdata[2]:.0f}")
+  fig.update_traces(hovertemplate="MMV ID:  %{customdata[0]} <br> Station name: %{customdata[3]} <br>TOC (mg C/l): %{customdata[1]:.6f} <br>Area: %{customdata[2]:.0f}")
 
   fig.update_traces(marker=dict(size=10))
 
@@ -596,6 +1547,7 @@ It is similar to SUVA, which uses Absorbance at 254mm instead of 420mm. It is us
 
 ```{python}
 #| jupyter_compat: true
+#| eval: false
 
 def map_sVISa(): 
     fig = px.scatter_map(
@@ -654,7 +1606,47 @@ htmltools::includeHTML( "../results/reports/maps/map_sVISa.html")
 
 ```{python}
 #| jupyter_compat: true
+#| eval: true
+import pandas as pd
+import geopandas as gpd
+from shapely.geometry import Point
+import plotly.express as px
+import plotly.io as pio
 
+# import plotly.io as pio
+# pio.renderers.default = "plotly_mimetype+notebook_connected"
+
+# Path to the CSV file
+file_path = "../results/r_py/pls_input.csv"
+
+# Load the CSV file into a DataFrame
+df = pd.read_csv(file_path)
+
+# Step 2: Convert to GeoDataFrame with SWEREF 99TM CRS
+geometry = [Point(xy) for xy in zip(df["stationCoordinateX"], df["stationCoordinateY"])]
+stations_gdf = gpd.GeoDataFrame(df, geometry=geometry, crs="EPSG:3006")  # SWEREF 99TM CRS
+
+# Step 3: Load Sweden shapefile and ensure it's in SWEREF 99TM
+sweden_shapefile = "../input/shapefiles/Sweden.zip"
+sweden_gdf = gpd.read_file(f"zip://{sweden_shapefile}")
+sweden_gdf = sweden_gdf.to_crs("EPSG:3006")  # Ensure CRS matches SWEREF 99TM
+
+sweden_gdf = sweden_gdf.to_crs("EPSG:4326")
+stations_gdf = stations_gdf.to_crs("EPSG:4326")
+
+# Extract coordinates from the GeoDataFrame for Plotly
+stations_gdf["lon"] = stations_gdf.geometry.x
+stations_gdf["lat"] = stations_gdf.geometry.y
+stations_gdf["area_km2"] = stations_gdf["area_ARO_m2"] / (1000000)
+#stations_gdf["org_charge_meq_mg_C"] = stations_gdf["org_charge_eq_mg_C"] * 1000
+# Convert Sweden boundary GeoDataFrame to GeoJSON for base map overlay
+sweden_geojson = sweden_gdf.__geo_interface__
+
+lakes_shapefile = "../input/shapefiles/Swedish_Lakes.zip"
+lakes_gdf = gpd.read_file(f"zip://{lakes_shapefile}")
+
+lakes_gdf = lakes_gdf.to_crs("EPSG:4326")
+lakes_geojson = lakes_gdf.__geo_interface__
 
 def map_cd():
 # Create an interactive map
@@ -662,12 +1654,12 @@ def map_cd():
       stations_gdf,
       lat="lat",
       lon="lon",
-      color="org_charge_eq_g_C",  # Column to determine color
+      color="org_charge_meq_g_C",  # Column to determine color
       color_continuous_scale="Viridis",  # Color scale (can be adjusted)
       zoom=3.5,  # Adjust zoom level as needed
       map_style="white-bg",
       title="Organic charge density",
-      custom_data=['mvm_id', "org_charge_eq_g_C", "area_km2", "stationName"]
+      custom_data=['mvm_id', "org_charge_meq_g_C", "area_km2", "stationName"]
   )
 
   fig.update_traces(hovertemplate="MMV ID:  %{customdata[0]} <br>Station name: %{customdata[3]} <br>Organi charge density (eq/g C): %{customdata[1]:.6f} <br>Area: %{customdata[2]:.0f}")
@@ -709,11 +1701,14 @@ map_cd().write_html("../results/reports/maps/map_cd.html", full_html= False,incl
 htmltools::includeHTML( "../results/reports/maps/map_cd.html")
 ```
 
+
 :::
 
-## Multivariate Analysis
+## Multivariate Spatial Analysis
 
 I chose to use a OPLS instead of a PLS for relating the results to catchment characteristics. Orthogonal Partial Least Squares (OPLS) enables to separately model the variation correlated (predictive) to the factor of interest and the uncorrelated (orthogonal) variation. While performing similarly to PLS, OPLS facilitates easier interpretation. I used the R package [ropls](https://rdrr.io/bioc/ropls/man/opls.html) to perform the below analysis, its the underlying code of the SIMCA software as used in analysis such as [Ehnvall et al., 2023](https://www.sciencedirect.com/science/article/pii/S0048969723037555).
+
+In the OPLS the explantory variables used are catchment characteristics listed in @tbl-catch_char. 
 
 ::: {.panel-tabset}
 
@@ -722,14 +1717,24 @@ I chose to use a OPLS instead of a PLS for relating the results to catchment cha
 
 **OPLS**
 ```{r}
+#| cache.refresh: true
 source("../src/sourcecode.R")
 library(ropls)
 library(plotly)
 
-opls.model <- opls(all %>% select(-c(org_charge_eq_mg_C,median_sVISa, mvm_id, stationName)), all$org_charge_eq_mg_C, orthoI = 1, predI = 1)
+opls.model <- opls(all %>% select(-c(org_charge_meq_g_C,median_sVISa, mvm_id, stationName)), all$org_charge_meq_g_C, orthoI = 1, predI = 1)
 ```
 
 ```{r}
+#| fig-cap: >
+#|   OPLS loading plot for Organic charge density. Blue variables indicate a VIP score > 1 
+#|   while black indicate a VIP < 1. The red is the response variable: organic charge density. 
+#|   The x axis is the predictive axis indicating covariation with the response while the 
+#|   orthogonal axis is variation not explaining any variation in the response variable.
+#| label: fig-loading-charge-density
+#| fig-alt: OPLS loading plot for Organic charge density.
+#| cache.refresh: true
+
 library(tibble)
 source("../src/sourcecode.R")
 plot_loading(opls.model, response_label = "Org. charge density", vip.threshold = 1.0, text_size = 12)
@@ -739,16 +1744,27 @@ plot_loading(opls.model, response_label = "Org. charge density", vip.threshold =
 
 Here a PLS was run instead of an OPLS for comparison
 ```{r}
-pls.model <- opls(all %>% select(-c(org_charge_eq_mg_C, median_sVISa, mvm_id, stationName)), all$org_charge_eq_mg_C)
+#| cache.refresh: true
+pls.model <- opls(all %>% select(-c(org_charge_meq_g_C, median_sVISa, mvm_id, stationName)), all$org_charge_meq_g_C)
 ```
 
 ### sVISa
 
 ```{r}
-opls.model.sVISa <- opls(all %>% filter(median_sVISa > 0) %>% select(-c(org_charge_eq_mg_C, mvm_id, mean_toc, stationName, median_sVISa)), all %>% filter(median_sVISa > 0) %>% .$median_sVISa, orthoI = 1, predI = 1)
+#| cache.refresh: true
+opls.model.sVISa <- opls(all %>% filter(median_sVISa > 0) %>% select(-c(org_charge_meq_g_C, mvm_id, median_toc, stationName, median_sVISa)), all %>% filter(median_sVISa > 0) %>% .$median_sVISa, orthoI = 1, predI = 1)
 ```
 
 ```{r}
+#| cache.refresh: true
+#| fig-cap: >
+#|    OPLS loading plot for sVISa. Blue variables indicate a VIP score > 1 while
+#|    black indicate a VIP < 1. The red is the response variable: sVISa. The x 
+#|    axis is the predictive axis indicating covariation with the response 
+#|    while the orthogonal axis is variation not explaining any variation in 
+#|    the response variable.  
+#| fig-alt: OPLS loading plot for sVISa.
+#| label: fig-loading-sVISa
 plot_loading(opls.model.sVISa, response_label = "sVISa", vip.threshold = 1.0, text_size = 12)
 ```
 
@@ -758,10 +1774,15 @@ plot_loading(opls.model.sVISa, response_label = "sVISa", vip.threshold = 1.0, te
 **OPLS**
 ```{r}
 # TOC
-opls.model.TOC <- opls(all %>% select(-c(org_charge_eq_mg_C,median_sVISa, mvm_id, mean_toc, stationName)), all$mean_toc, orthoI = 1, predI = 1)
+#| cache.refresh: true
+#| fig-cap: OPLS loading plot for organic carbon concentrations. Blue variables indicate a VIP score > 1 while black indicate a VIP < 1. The red is the response variable: organic charge density. The x axis is the predictive axis indicating covariation with the response while the orthogonal axis is variation not explaining any variation in the response variable.  
+#| fig-alt: OPLS loading plot for toc.
+#| label: fig-loading-toc
+opls.model.TOC <- opls(all %>% select(-c(org_charge_meq_g_C,median_sVISa, mvm_id, median_toc, stationName)), all$median_toc, orthoI = 1, predI = 1)
 ```
 
 ```{r}
+#| cache.refresh: true
 plot_loading(opls.model.TOC, response_label = "TOC", vip.threshold = 1.0, text_size = 12)
 ```
 
@@ -769,40 +1790,20 @@ plot_loading(opls.model.TOC, response_label = "TOC", vip.threshold = 1.0, text_s
 
 
 ```{r}
-pls.model <- opls(all %>% select(-c(org_charge_eq_mg_C,mean_toc,median_sVISa, mvm_id, stationName)), all$mean_toc)
+#| cache.refresh: true
+pls.model <- opls(all %>% select(-c(org_charge_meq_g_C,median_toc,median_sVISa, mvm_id, stationName)), all$median_toc)
 ```
 
 ### Comparison
 
-```{r}
+```{r VIP table}
+#| cache.refresh: true
 VIP_all <- enframe(getVipVn(opls.model), name = "Variable", value = "org.charge") %>%  left_join(enframe(getVipVn(opls.model.TOC), name = "Variable", value = "TOC")) %>% left_join(enframe(getVipVn(opls.model.sVISa), name = "Variable", value = "sVISa")) 
 
 loading_oc <- getLoadingMN(opls.model)[,1]         # Values of the vector become the 'Value' column
 loading_toc <- getLoadingMN(opls.model.TOC)[,1] 
 loading_sVISa <- getLoadingMN(opls.model.sVISa)[,1] 
 
-# Function to process a single column with named loading vector
-process_column <- function(column, loading_vector) {
-  # Filter and sort the column
-  filtered_indices <- which(column > 0.9) # Filter values > 0.9
-  sorted_indices <- order(column[filtered_indices], decreasing = TRUE)
-  filtered_variables <- VIP_all$Variable[filtered_indices][sorted_indices]
-  filtered_values <- column[filtered_indices][sorted_indices]
-  
-  # Match loading signs
-  signed_values <- sapply(1:length(filtered_variables), function(i) {
-    variable <- filtered_variables[i]
-    value <- sprintf("%.3f", filtered_values[i]) # Format value to 3 decimal places
-    sign <- ifelse(loading_vector[variable] > 0, "+", "-") # Use vector names to match
-    paste0(sign, value) # Combine sign and value
-  })
-  
-  # Return as a data frame
-  data.frame(
-    Variable = filtered_variables,
-    Value = signed_values
-  )
-}
 
 # Process each column with its corresponding loading vector
 sorted_data <- list(
@@ -834,17 +1835,6 @@ sorted_df <- data.frame(
 )
 
 
-
-
-r2_q2 <- function(pls_model){
-  r2 <- pls_model@summaryDF[1,2]
-  q2 <- pls_model@summaryDF[1,3]
-  s <- length(pls_model@scoreMN)
-  v <- length(pls_model@loadingMN)
-  
-  return(c(r2, q2, s, v))
-}
-
 new_rows <- data.frame(
   Org_Charge_Density = c("R2", "Q2", "samples", "variables"),
   Org_Charge_Density_VIP = r2_q2(opls.model), # Example values
@@ -866,5 +1856,37 @@ final_df %>%
 
 ```
 
+
+:::
+
+## Spatial-temporal 
+
+Visualizing how the explantory power changes for the three periods: 1990-1997, 1998-2012, 2013-2024.  
+
+```{r split data}
+#| cache.refresh: true
+all <- data %>% filter(abs(charge_diff) < 0.5) %>% mutate(sVISa = Abs_F420_5cm/(TOC_mol*12.01))%>% 
+filter(year < 2008)%>% 
+ group_by(mvm_id) %>% summarise(org_charge_eq_mg_C = median(org_charge_eq_mg_C), median_toc = median(TOC_mol), median_sVISa = median(sVISa, na.rm = TRUE)) %>%
+ ungroup() %>% mutate(mvm_id = as_factor(mvm_id))%>% 
+ select(mvm_id, org_charge_eq_mg_C, median_toc, median_sVISa) %>%
+ left_join(catch_char, by = join_by(mvm_id))
+
+
+```
+
+::: panel-tabset
+
+### Organic Charge Density
+
+```{r}
+#| eval: false
+#| cache.refresh: true
+p1.cd <- opls(all %>% select(-c(org_charge_eq_mg_C,median_sVISa, mvm_id, stationName)), all$org_charge_eq_mg_C, orthoI = 1, predI = 1)
+```
+
+### TOC
+
+### Charge Density
 
 :::

@@ -281,3 +281,35 @@ plot_loading <- function(opls_model, response_label = "TOC", vip.threshold = 1.0
   
   return(plot)
 }
+
+# Function to process a single column with named loading vector
+process_column <- function(column, loading_vector) {
+  # Filter and sort the column
+  filtered_indices <- which(column > 0.9) # Filter values > 0.9
+  sorted_indices <- order(column[filtered_indices], decreasing = TRUE)
+  filtered_variables <- VIP_all$Variable[filtered_indices][sorted_indices]
+  filtered_values <- column[filtered_indices][sorted_indices]
+  
+  # Match loading signs
+  signed_values <- sapply(1:length(filtered_variables), function(i) {
+    variable <- filtered_variables[i]
+    value <- sprintf("%.3f", filtered_values[i]) # Format value to 3 decimal places
+    sign <- ifelse(loading_vector[variable] > 0, "+", "-") # Use vector names to match
+    paste0(sign, value) # Combine sign and value
+  })
+  
+  # Return as a data frame
+  data.frame(
+    Variable = filtered_variables,
+    Value = signed_values
+  )
+}
+
+r2_q2 <- function(pls_model){
+  r2 <- pls_model@summaryDF[1,2]
+  q2 <- pls_model@summaryDF[1,3]
+  s <- length(pls_model@scoreMN)
+  v <- length(pls_model@loadingMN)
+  
+  return(c(r2, q2, s, v))
+}
