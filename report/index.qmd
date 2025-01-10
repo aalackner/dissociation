@@ -11,9 +11,10 @@ format:
         smooth-scroll: true
         code-fold: true
         theme: lux
-        page-layout: full
 execute: 
   cache: true
+  freeze: true
+  keep-md: true
 ---
 
 # Overview
@@ -190,36 +191,6 @@ if (re.read != 're fig' & exists("trendplotdata_selected_sVISa")){
   dpi = 300)
 } 
 ```
-```{r}
-#| include: false
-if (re.read == 're read'){
-df_selected %>%  filter(!is.na(sVISa)) %>% # create sVISa and filter any variables where it does not exist
-  group_by(mvm_id) %>%  # group by mvm_id to remocve andy station where we don't have enough data points
-  filter(n() >= 50) %>%  
-  ungroup() %>%
-     select(mvm_id, sVISa, sampling_date,x, stationName) %>% mutate(SiteID = as.factor(mvm_id))%>% pivot_longer(cols=c("sVISa")) %>% 
-    screeningmodeling(values=value,
-                    datevar = sampling_date, 
-                    link = "identity", 
-                    conf.type = "conf",
-                    conf.level=0.95,
-                    beep = FALSE, 
-                    tdist = FALSE,
-                    autocor = TRUE,
-                    mvm_id,
-                    x,
-                    stationName, name) ->
-  trendplotdata_selected_sVISa
-  trendplotdata_selected_sVISa %>% left_join(coordinates) %>% saveRDS(., file = "data/trendplotdata_selected_sVISa.rds")
-}  else if (re.read == 're load') {
-  trendplotdata_selected_sVISa <- tryCatch({
-    readRDS(file = "data/trendplotdata_selected_sVISa.rds")
-  }, error = function(e) {
-    message("An error occurred while reading the RDS file: ", e$message)
-    NULL # Return NULL or an alternative value to handle the error gracefully
-  })
-}
-```
 
 ```{r}
 #| include: false
@@ -240,33 +211,13 @@ if (re.read != 're fig' & exists("trendplotdata_selected_sVISa")){
 }  
 ```
 
-
-
-```{r}
-#| include: false
-if (re.read != 're fig' & exists("trendplotdata_selected_sVISa")){
-  fig <- trendplotdata_selected_sVISa%>%plot_screeningtrends(y_id = mvm_id, sorting = -y) + ggtitle("sVISa")+ xlab(NULL) + 
-        theme(text=element_text(size=5), #change font size of all text
-        axis.text=element_text(size=3), #change font size of axis text
-        axis.title=element_text(size=6), #change font size of axis titles
-        plot.title=element_text(size=6.5), #change font size of plot title
-        legend.text=element_text(size=3), #change font size of legend text
-        legend.title=element_text(size=3.5),
-        legend.key.size = unit(0.3, 'cm')) #change legend key size))
-  fig %>% ggsave(plot = ., file = "figures/sVISa_lasange_selected.png", width = 5,
-  height = 20,
-  units = "cm",
-  dpi = 300)
-} 
-```
-
 ```{r}
 #| echo: false
 #| fig-cap: "Proportion plot of sVISa trends across Sweden. Updated from Eklöf et al, 2020."
 #| fig-alt: sVISa proportion of trends plot.
 #| fig-subcap:
 #|      - For all 316 stations that fit the initial selection criteria.
-#|      - For the 126 stations charge density was modelled in this study.
+#|      - For the 136 stations charge density was modelled in this study.
 #| label: fig-sVISa-prop
 #| layout-ncol: 2
 
@@ -280,7 +231,7 @@ knitr::include_graphics(path = c("figures/sVISa_proportion.png","figures/sVISa_p
 #| fig-cap: "Lasange plot of sVISa trends across Sweden sorted North to South. Updated from Eklöf et al, 2020."
 #| fig-subcap:
 #|    - All 316 stations that match the initial selection criteria.
-#|    - 126 stations for which we could model charge density sucessfully for.
+#|    - 136 stations for which we could model charge density sucessfully for.
 #| fig-alt: sVISa lasange plot of trends plot.
 #| label: fig-sVISa-lasange
 #| layout-ncol: 2
@@ -297,7 +248,7 @@ df  %>% filter(!is.na(TOC) )%>% # create TOC and filter any variables where it d
   group_by(mvm_id) %>%  # group by mvm_id to remocve andy station where we don't have enough data points
   filter(n() >= 50) %>%  
   ungroup() %>%
-     select(mvm_id, TOC, sampling_date,x, stationName) %>% mutate(SiteID = as.factor(mvm_id))%>% pivot_longer(cols=c("TOC")) %>% 
+     select(mvm_id, TOC, sampling_date,y, stationName) %>% mutate(SiteID = as.factor(mvm_id))%>% pivot_longer(cols=c("TOC")) %>% 
     screeningmodeling(values=value,
                     datevar = sampling_date, 
                     link = "identity", 
@@ -307,7 +258,7 @@ df  %>% filter(!is.na(TOC) )%>% # create TOC and filter any variables where it d
                     tdist = FALSE,
                     autocor = TRUE,
                     mvm_id,
-                    x,
+                    y,
                     stationName) ->
   trendplotdata_chemistry_TOC
   trendplotdata_chemistry_TOC %>% left_join(coordinates) %>% saveRDS(., file = "data/trendplotdata_chemistry_TOC.rds")
@@ -573,6 +524,7 @@ map_stations().write_html("../results/reports/maps/map_stations.html", full_html
 #| fig-alt: Map of stations
 #| label: fig-map-stations
 #| fig-height: 8
+#| cache-refresh: false
 htmltools::includeHTML("../results/reports/maps/map_stations.html")
 ```
 
@@ -591,7 +543,7 @@ htmltools::includeHTML("../results/reports/maps/map_stations.html")
 #| fig-cap: Histogram of number of samples per station used in further analysis. There are 42 907 samples across 187 stations. In further analysis only stations with more than 5 samples were considered, reducing the number of stations to 173.
 #| fig-alt: Histogram of number of samples per station
 #| label: fig-hist_stations 
-#| cache.refresh: true
+#| cache-refresh: false
 
 library(tidyverse)
 
@@ -804,6 +756,7 @@ ggplot(climate, aes(x = annual_precip)) +
        y = "Frequency") +
   theme_minimal()
 ```
+
 ```{r}
 
 climate_p1 <- read.csv("../input/climate/daily_climate.csv") %>% filter(mvm_id %in% mvm_ids) %>% mutate(date = as.Date(time), year = year(date)) %>% filter (year >= 1990 & year < 1998)  %>% group_by(mvm_id, year) %>% summarise(mean_annual_temp = mean(tas_avg), annual_precip= sum(pr_avg)) %>% ungroup() %>% group_by(mvm_id) %>% summarise(mean_annual_temp = mean(mean_annual_temp), annual_precip= mean(annual_precip)) %>% ungroup() %>% mutate(mvm_id = as.factor(mvm_id)) %>% mutate(period = "1990-1997")
@@ -861,7 +814,8 @@ ggboxplot(climate_all ,x = "period", y = "annual_precip",
 [SMHI S-HYPE](https://www.smhi.se/data/hydrologi/vattenwebb/data-for-delavrinningsomraden-sotvatten-1.118236)
 
 Area proportional discharge calculated for each station, using the local discharge when considering sub-cacthments of the SMHI unit catchments (Aroid catchments), and total when the SMHI subcatchment is smaller than the station catchment. Were possible upstream station corrected discharge was used.   
-
+c
+Discharge is in m3/s and specific discharge in mm/day. 
 ```{r}
 #| fig-cap: Discharge for all catchments in the DOC dissociation study. 
 #| fig-alt: Histogram of charge density.
@@ -875,14 +829,16 @@ discharge <- read.csv("../input/discharge/daily_discharge.csv") %>% filter(mvm_i
 ggplot(discharge, aes(group = year, x = year, y = log(median_q_m3_s))) +
 geom_boxplot()
 
-ggplot(discharge %>% filter (mvm_id %in% c(21, 180,33,222 )) %>% mutate(q_spec= (median_q_m3_s / area_ARO_m2)*1000), aes( x = year, y = q_spec, color = mvm_id)) +
+ggplot(discharge %>% filter (mvm_id %in% c(21, 180,33,222 )) %>% mutate(q_spec= (median_q_m3_s / area_ARO_m2)*1000*60*60*24), aes( x = year, y = q_spec, color = mvm_id)) +
 geom_line()+
 labs( y = "Specific discharge (mm/s)")
 
-discharge %>% mutate(q_spec= (median_q_m3_s / area_ARO_m2)*1000, p25_spec = (p25_q_m3_s / area_ARO_m2)*1000, p75_spec = (p75_q_m3_s / area_ARO_m2)*1000 ) %>%
+discharge %>% mutate(q_spec= (median_q_m3_s / area_ARO_m2)*1000*60*60*24, p25_spec = (p25_q_m3_s / area_ARO_m2)*1000*60*60*24, p75_spec = (p75_q_m3_s / area_ARO_m2)*1000*60*60*24 ) %>%
 group_by(mvm_id) %>% summarise(
     mean_Q_spec = mean(q_spec), p25_Q_spec = mean(p25_spec), p75_Q_spec = mean(p75_spec), mean_Q = mean(median_q_m3_s)) %>% ungroup() -> discharge_y
 ```
+
+
 ```{r}
 #| fig-cap: Change in discharge for the three periods 1990-1997, 1998-2011, 2012-2024.
 #| label: fig-discharge-periods 
@@ -892,15 +848,15 @@ group_by(mvm_id) %>% summarise(
 #|    - 75% discharge
 #| fig-alt: Climate change in the three periods.
 #| layout-ncol: 2
-discharge %>% mutate(q_spec= (median_q_m3_s / area_ARO_m2)*1000, p25_spec = (p25_q_m3_s / area_ARO_m2)*1000, p75_spec = (p75_q_m3_s / area_ARO_m2)*1000 ) %>% filter((year >= 1990 & year < 1998) ) %>%
+discharge %>% mutate(q_spec= (median_q_m3_s / area_ARO_m2)*1000*60*60*24, p25_spec = (p25_q_m3_s / area_ARO_m2)*1000*60*60*24, p75_spec = (p75_q_m3_s / area_ARO_m2)*1000*60*60*24 ) %>% filter((year >= 1990 & year < 1998) ) %>%
 group_by(mvm_id) %>% summarise(
     log_mean_Q_spec = mean(log(q_spec)), log_p25_Q_spec = mean(log(p25_spec)), log_p75_Q_spec = mean(log(p75_spec)), log_mean_Q = mean(log(median_q_m3_s)))  %>% ungroup() %>% mutate(period = "1990-1997") -> discharge_p1
 
-discharge %>% mutate(q_spec= (median_q_m3_s / area_ARO_m2)*1000, p25_spec = (p25_q_m3_s / area_ARO_m2)*1000, p75_spec = (p75_q_m3_s / area_ARO_m2)*1000 ) %>% filter((year >= 1998 & year < 2012) ) %>%
+discharge %>% mutate(q_spec= (median_q_m3_s / area_ARO_m2)*1000*60*60*24, p25_spec = (p25_q_m3_s / area_ARO_m2)*1000*60*60*24, p75_spec = (p75_q_m3_s / area_ARO_m2)*1000*60*60*24 ) %>% filter((year >= 1998 & year < 2012) ) %>%
 group_by(mvm_id) %>% summarise(
     log_mean_Q_spec = mean(log(q_spec)), log_p25_Q_spec = mean(log(p25_spec)), log_p75_Q_spec = mean(log(p75_spec)), log_mean_Q = mean(log(median_q_m3_s)))  %>% mutate(period = "1998-2011") -> discharge_p2
 
-discharge %>% mutate(q_spec= (median_q_m3_s / area_ARO_m2)*1000, p25_spec = (p25_q_m3_s / area_ARO_m2)*1000, p75_spec = (p75_q_m3_s / area_ARO_m2)*1000 ) %>% filter((year >= 2012 & year < 2024) ) %>%
+discharge %>% mutate(q_spec= (median_q_m3_s / area_ARO_m2)*1000*60*60*24, p25_spec = (p25_q_m3_s / area_ARO_m2)*1000*60*60*24, p75_spec = (p75_q_m3_s / area_ARO_m2)*1000*60*60*24 ) %>% filter((year >= 2012 & year < 2024) ) %>%
 group_by(mvm_id) %>% summarise(
     log_mean_Q_spec = mean(log(q_spec)), log_p25_Q_spec = mean(log(p25_spec)), log_p75_Q_spec = mean(log(p75_spec)), log_mean_Q = mean(log(median_q_m3_s))) %>% ungroup() %>% mutate(period = "2012-2024") -> discharge_p3
 
@@ -1056,7 +1012,7 @@ map_stations().write_html("../results/reports/maps/map_discharge.html", full_htm
 #| fig-alt: Map of discharge.
 #| label: fig-map-discharge
 #| fig-height: 8
-#| cache.refresh: true
+#| cache-refresh: false
 htmltools::includeHTML("../results/reports/maps/map_discharge.html")
 ```
 
@@ -1092,7 +1048,7 @@ combined_df %>% write.csv(file = "../input/catchment_characteristics/NDVI.csv", 
 #| fig-subcap:
 #|    - Boxplot of all the catchments together.
 #|    - Example of summer NDVI for 4 different catchments.
-#| cache.refresh: false
+#| cache-refresh: false
 
 ndvi <- read.csv("../input/catchment_characteristics/NDVI.csv")  %>% filter(mvm_id %in% mvm_ids) %>% mutate(date = make_date(year,month,15)) %>% filter (month %in% c(6,7,8)) %>% group_by(mvm_id, year) %>% summarise(summer_NDVI = mean(NDVI_median, na.rm = TRUE)) %>% ungroup() %>% mutate(mvm_id = as.factor(mvm_id)) 
 
@@ -1109,7 +1065,7 @@ ndvi_y <- ndvi %>% group_by(mvm_id)%>% summarise(summer_NDVI = mean(summer_NDVI,
 #| fig-cap: Summer NDVI June-August for all catchments in the DOC dissociation study for the periods 1990-1997, 1998-2011, 2012-2024. 
 #| fig-alt: NDVI comparison.
 #| label: fig-ndvi.comp
-#| cache.refresh: false
+#| cache-refresh: false
 
 ndvi  %>% filter((year >= 1990 & year < 1998) ) %>%
 group_by(mvm_id) %>% summarise(summer_NDVI = mean(summer_NDVI, na.rm = TRUE))  %>% ungroup() %>% mutate(period = "1990-1997") -> ndvi_p1
@@ -1166,6 +1122,8 @@ ggplot(df_long, aes(x = Variable, y = Value, fill = Variable)) +
 
 :::
 
+
+
 ## Summary
 
 Most are given as the percenctage of the area in the catchment covered by the specific data source. Exeptions are:  
@@ -1177,7 +1135,7 @@ Most are given as the percenctage of the area in the catchment covered by the sp
 
 
 ```{r}
-#| cache.refresh: true
+#| cache-refresh: false
 #| label: tbl-catch_char
 #| tbl-cap: Catchment characteristics for the stations used in this study.
 
@@ -1192,29 +1150,29 @@ catch_char <- landuse %>%
 
 library(vtable)
 
-sumtable(catch_char %>% select(-mvm_id), out ="kable", digits = 3)
+sumtable(catch_char %>% select(-mvm_id), out ="kable", digits = 3) %>% kable_styling(font_size = 10)
 ```
 
 ---
 
 # Water Chemistry
 
-In this section we test for normality of the data, compare the variation within stations and between stations and look at correlations betweeen the different water chemistry variables. For this we use the data of the 126 stations for which we sucessfully modelled organic charge. 
+In this section we test for normality of the data, compare the variation within stations and between stations and look at correlations betweeen the different water chemistry variables. For this we use the data of the 136 stations for which we sucessfully modelled organic charge. 
 
 ```{r}
-#| cache.refresh: true
+#| cache-refresh: false
 data %>% filter(abs(charge_diff) < 0.5) %>% mutate(sVISa = Abs_F420_5cm/(TOC_mol*12.01*1000)) -> data
 data %>% mutate(year = year(sampling_date), TOC_mg_l = TOC_mol*12.01*1000, org_charge_density_meq_g_C = org_charge_eq_mg_C * 1000*1000) %>% select(year,EC_mS_m, sVISa,org_charge_density_meq_g_C,TOC_mg_l,SO4_mol,Alk_Acid_mol, sampling_date, Abs_F420_5cm, mvm_id, adom_doc, charge_diff, org_charge, Sum.of.cations, pH_, Ionic.strength, sample_id) -> data_1
 ```
 
 ```{r}
-#| cache.refresh: true
+#| cache-refresh: false
 #| label: tbl-chemistry
 #| tbl-cap: Water chemistry values measured and modelled for the stations used in this study.
 #| 
 library(vtable)
 
-sumtable(data_1)
+sumtable(data_1, out = "kable") %>% kable_styling(font_size = 10)
 ```
 
 ::: panel-tabset
@@ -1404,18 +1362,453 @@ The three periods are:
 - 1998-2012
 - 2013-2024
 
-For each stations we split the data minto these three periods, then we test the data within each stations for changes between the periods using Kruskal-Wallis. 
+For each stations we split the data into these three periods, then we test the data within each stations for changes between the periods using Kruskal-Wallis. 
 
+```{r}
+#| cache-refresh: false
+#| label: tbl-chemistry-periods
+#| tbl-cap: Water chemistry values measured and modelled for the stations used in this study.
+
+library(vtable)
+data_periods <- data_1 %>% 
+  mutate(
+    period = case_when(
+      sampling_date < as.Date("1998-01-01") ~ "1990-1997",
+      sampling_date >= as.Date("1997-01-01") & sampling_date <= as.Date("2012-01-01") ~ "1998-2012",
+      sampling_date > as.Date("2012-01-01") ~ "2012-2024",
+      TRUE ~ NA_character_  # Handle any NA values if necessary
+    )
+  )
+
+# Get an overview by period
+data_periods %>% sumtable(., group = "period", out = "kable") %>% kable_styling(font_size = 10)
+```
 ## Significant Testing
+
+::: panel-tabset
+
+### sVISa
+
+```{r}
+#| fig.cap: Kruskal Wallis with confidence interval of 95% to find number of stations with significant differences bettwen the periods. 
+#| label: fig-sig-sVISa
+#| out.width: 60%
+
+summary_stats <- data_periods %>% arrange(sampling_date) %>%
+  group_by(mvm_id, period) %>%
+  summarise(
+    median= median(sVISa, na.rm = TRUE),
+    iqr = IQR(sVISa, na.rm = TRUE),  # Interquartile Range
+    n = n()  # Count of observations per group
+  ) %>%
+  ungroup()
+
+# Step 3: Reshape the data to have periods as columns
+summary_table <- summary_stats %>%
+  pivot_wider(
+    names_from = period,
+    values_from = c(median, iqr, n)
+  )
+
+# Step 4: Filter data for Kruskal-Wallis testing
+# Ensure each group (mvm_id) has more than one period and non-identical sVISa values across periods
+testable_data <- data_periods %>% arrange(sampling_date) %>%
+  group_by(mvm_id) %>%
+  filter(n_distinct(period) > 1) %>%  # At least two periods
+  filter(n_distinct(sVISa[!is.na(sVISa)]) > 2) %>%  # At least two unique sVISa values
+  summarise(kruskal_p_value = tryCatch({
+    kruskal.test(sVISa ~ period)$p.value  # Run Kruskal-Wallis only if conditions met
+  }, error = function(e) {
+    message("Error in Kruskal-Wallis test for mvm_id ", unique(mvm_id), ": ", e$message)
+    NA
+  }))
+  # Return NA if test fails
+
+# Step 5: Merge the significance results with the summary table
+final_table <- left_join(summary_table, testable_data, by = "mvm_id")
+
+# View the final table with significance results
+# kable(final_table)
+
+# Create a summary table that counts the number of mvm_ids with significant and non-significant differences:
+summary_significance <- final_table %>%
+  mutate(significant = ifelse(kruskal_p_value < 0.05, "Significant", "Not Significant")) %>%
+  count(significant)
+
+
+# You can create a bar plot to visualize the proportion of mvm_id with significant vs. non-significant differences:
+
+ggplot(summary_significance, aes(x = significant, y = n, fill = significant)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Significance of Differences Across Periods for Each Station",
+       x = "Significance", y = "Number of Stations") +
+  scale_fill_manual(values = c("Significant" = "steelblue", "Not Significant" = "grey")) +
+  theme_minimal()
+```
+```{r}
+#| cache-refresh: false
+#| label: tbl-sVISa-significance
+#| tbl-cap: sVISa significance using Kruskal Wallis to determine significance and then Dunn's test as a post hoc test to find the significant differences.
+
+library(FSA)
+
+# Perform pairwise Dunn's test for each mvm_id
+# Ensure period is a factor
+
+data_periods <- data_periods %>%
+  mutate(period = as.factor(period))
+
+mvm_ids_sig <- final_table %>% filter((kruskal_p_value < 0.05)) %>% select(mvm_id)
+# Perform Dunn's test for each mvm_id
+pairwise_results <- data_periods %>%
+  arrange(sampling_date) %>%
+  filter(mvm_id %in% mvm_ids_sig$mvm_id) %>%
+  group_by(mvm_id) %>%
+  filter(n_distinct(period) > 1) %>%
+  group_modify(~ {
+    tryCatch(
+      data.frame(
+        dunn_test = list(as.data.frame(dunnTest(sVISa ~ period, data = .x, method = "bonferroni")$res))
+      ),
+      error = function(e) data.frame(dunn_test_summary = list(NULL))  # Handle errors
+    )
+  }) %>%
+  ungroup()
+
+
+# View the result
+# pairwise_results %>% filter(dunn_test.P.adj < 0.05)
+
+summary_dunns <- pairwise_results %>% group_by(dunn_test.Comparison) %>%
+  mutate(significant = ifelse(dunn_test.P.adj < 0.05, "Significant", "Not Significant")) %>%
+  count(significant) %>% ungroup() %>%
+  pivot_wider(
+    names_from = significant,  # Create columns based on the 'significant' values
+    values_from = n,           # Populate these columns with values from 'n'
+    values_fill = 0            # Fill missing values with 0
+  )
+
+kable(summary_dunns)
+```
+
+
+```{r}
+#| fig.cap: sVISa of all stations
+#| fig.subcap:
+#|      - "Median"
+#|      - "IQR"
+#| layout-ncol: 2
+#| label: fig-box-sVISa
+#| 
+ggplot(summary_stats, aes(x = period, y = median, fill = period)) +
+  geom_boxplot() +
+  # geom_text(aes(
+  #   x = period,
+  #   y = max(median, na.rm = TRUE) + 0.002,  # Adjust text position
+  #   label = paste0("sig n: ", sig_n, "\ninsig n: ", insig_n)
+  # ), color = "black", size = 4, position = position_dodge(width = 0.9)) +
+  labs(x = "Period", y = "Median sVISa") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+ggplot(summary_stats, aes(x = period, y = iqr, fill = period)) +
+  geom_boxplot() +
+  # geom_text(aes(
+  #   x = period,
+  #   y = max(median, na.rm = TRUE) + 0.002,  # Adjust text position
+  #   label = paste0("sig n: ", sig_n, "\ninsig n: ", insig_n)
+  # ), color = "black", size = 4, position = position_dodge(width = 0.9)) +
+  labs(x = "Period", y = "IQR sVISa") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+### TOC
+
+```{r}
+#| fig.cap: Kruskal Wallis with confidence interval of 95% to find number of stations with significant differences bettwen the periods. 
+#| label: fig-sig-TOC
+#| out.width: 60%
+
+data_periods %>% rename(TOC = TOC_mg_l) -> data_periods
+
+summary_stats <- data_periods %>% arrange(sampling_date) %>%
+  group_by(mvm_id, period) %>%
+  summarise(
+    median= median(TOC, na.rm = TRUE),
+    iqr = IQR(TOC, na.rm = TRUE),  # Interquartile Range
+    n = n()  # Count of observations per group
+  ) %>%
+  ungroup()
+
+# Step 3: Reshape the data to have periods as columns
+summary_table <- summary_stats %>%
+  pivot_wider(
+    names_from = period,
+    values_from = c(median, iqr, n)
+  )
+
+# Step 4: Filter data for Kruskal-Wallis testing
+# Ensure each group (mvm_id) has more than one period and non-identical TOC values across periods
+testable_data <- data_periods %>% arrange(sampling_date) %>%
+  group_by(mvm_id) %>%
+  filter(n_distinct(period) > 1) %>%  # At least two periods
+  filter(n_distinct(TOC[!is.na(TOC)]) > 2) %>%  # At least two unique TOC values
+  summarise(kruskal_p_value = tryCatch({
+    kruskal.test(TOC ~ period)$p.value  # Run Kruskal-Wallis only if conditions met
+  }, error = function(e) {
+    message("Error in Kruskal-Wallis test for mvm_id ", unique(mvm_id), ": ", e$message)
+    NA
+  }))
+  # Return NA if test fails
+
+# Step 5: Merge the significance results with the summary table
+final_table <- left_join(summary_table, testable_data, by = "mvm_id")
+
+# View the final table with significance results
+# kable(final_table)
+
+# Create a summary table that counts the number of mvm_ids with significant and non-significant differences:
+summary_significance <- final_table %>%
+  mutate(significant = ifelse(kruskal_p_value < 0.05, "Significant", "Not Significant")) %>%
+  count(significant)
+
+
+# You can create a bar plot to visualize the proportion of mvm_id with significant vs. non-significant differences:
+
+ggplot(summary_significance, aes(x = significant, y = n, fill = significant)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Significance", y = "Number of Stations") +
+  scale_fill_manual(values = c("Significant" = "steelblue", "Not Significant" = "grey")) +
+  theme_minimal()
+```
+```{r}
+#| cache-refresh: false
+#| label: tbl-TOC-significance
+#| tbl-cap: TOC significance using Kruskal Wallis to determine significance and then Dunn's test as a post hoc test to find the significant differences.
+
+library(FSA)
+
+# Perform pairwise Dunn's test for each mvm_id
+# Ensure period is a factor
+
+data_periods <- data_periods %>%
+  mutate(period = as.factor(period))
+
+mvm_ids_sig <- final_table %>% filter((kruskal_p_value < 0.05)) %>% select(mvm_id)
+# Perform Dunn's test for each mvm_id
+pairwise_results <- data_periods %>%
+  arrange(sampling_date) %>%
+  filter(mvm_id %in% mvm_ids_sig$mvm_id) %>%
+  group_by(mvm_id) %>%
+  filter(n_distinct(period) > 1) %>%
+  group_modify(~ {
+    tryCatch(
+      data.frame(
+        dunn_test = list(as.data.frame(dunnTest(TOC ~ period, data = .x, method = "bonferroni")$res))
+      ),
+      error = function(e) data.frame(dunn_test_summary = list(NULL))  # Handle errors
+    )
+  }) %>%
+  ungroup()
+
+
+# View the result
+# pairwise_results %>% filter(dunn_test.P.adj < 0.05)
+
+summary_dunns <- pairwise_results %>% group_by(dunn_test.Comparison) %>%
+  mutate(significant = ifelse(dunn_test.P.adj < 0.05, "Significant", "Not Significant")) %>%
+  count(significant) %>% ungroup() %>%
+  pivot_wider(
+    names_from = significant,  # Create columns based on the 'significant' values
+    values_from = n,           # Populate these columns with values from 'n'
+    values_fill = 0            # Fill missing values with 0
+  )
+
+kable(summary_dunns)
+```
+
+
+```{r}
+#| fig.cap: TOC of all stations
+#| fig.subcap:
+#|      - "Median"
+#|      - "IQR"
+#| layout-ncol: 2
+#| label: fig-box-TOC
+#| 
+ggplot(summary_stats, aes(x = period, y = median, fill = period)) +
+  geom_boxplot() +
+  # geom_text(aes(
+  #   x = period,
+  #   y = max(median, na.rm = TRUE) + 0.002,  # Adjust text position
+  #   label = paste0("sig n: ", sig_n, "\ninsig n: ", insig_n)
+  # ), color = "black", size = 4, position = position_dodge(width = 0.9)) +
+  labs(x = "Period", y = "Median TOC (mg/l)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+ggplot(summary_stats, aes(x = period, y = iqr, fill = period)) +
+  geom_boxplot() +
+  # geom_text(aes(
+  #   x = period,
+  #   y = max(median, na.rm = TRUE) + 0.002,  # Adjust text position
+  #   label = paste0("sig n: ", sig_n, "\ninsig n: ", insig_n)
+  # ), color = "black", size = 4, position = position_dodge(width = 0.9)) +
+  labs(x = "Period", y = "IQR TOC (mg/l)") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+### Organic charge density
+
+```{r}
+#| fig.cap: Kruskal Wallis with confidence interval of 95% to find number of stations with significant differences bettwen the periods. 
+#| label: fig-sig-org_charge_density
+#| out.width: 60%
+
+data_periods <- data_periods %>% mutate(org_charge_density = org_charge_density_meq_g_C)
+
+summary_stats <- data_periods %>% arrange(sampling_date) %>%
+  group_by(mvm_id, period) %>%
+  summarise(
+    median= median(org_charge_density, na.rm = TRUE),
+    iqr = IQR(org_charge_density, na.rm = TRUE),  # Interquartile Range
+    n = n()  # Count of observations per group
+  ) %>%
+  ungroup()
+
+# Step 3: Reshape the data to have periods as columns
+summary_table <- summary_stats %>%
+  pivot_wider(
+    names_from = period,
+    values_from = c(median, iqr, n)
+  )
+
+# Step 4: Filter data for Kruskal-Wallis testing
+# Ensure each group (mvm_id) has more than one period and non-identical org_charge_density values across periods
+testable_data <- data_periods %>% arrange(sampling_date) %>%
+  group_by(mvm_id) %>%
+  filter(n_distinct(period) > 1) %>%  # At least two periods
+  filter(n_distinct(org_charge_density[!is.na(org_charge_density)]) > 2) %>%  # At least two unique org_charge_density values
+  summarise(kruskal_p_value = tryCatch({
+    kruskal.test(org_charge_density ~ period)$p.value  # Run Kruskal-Wallis only if conditions met
+  }, error = function(e) {
+    message("Error in Kruskal-Wallis test for mvm_id ", unique(mvm_id), ": ", e$message)
+    NA
+  }))
+  # Return NA if test fails
+
+# Step 5: Merge the significance results with the summary table
+final_table <- left_join(summary_table, testable_data, by = "mvm_id")
+
+# View the final table with significance results
+# kable(final_table)
+
+# Create a summary table that counts the number of mvm_ids with significant and non-significant differences:
+summary_significance <- final_table %>%
+  mutate(significant = ifelse(kruskal_p_value < 0.05, "Significant", "Not Significant")) %>%
+  count(significant)
+
+
+# You can create a bar plot to visualize the proportion of mvm_id with significant vs. non-significant differences:
+
+ggplot(summary_significance, aes(x = significant, y = n, fill = significant)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Significance of Differences Across Periods for Each Station",
+       x = "Significance", y = "Number of Stations") +
+  scale_fill_manual(values = c("Significant" = "steelblue", "Not Significant" = "grey")) +
+  theme_minimal()
+```
+```{r}
+#| cache-refresh: false
+#| label: tbl-org_charge_density-significance
+#| tbl-cap: org_charge_density significance using Kruskal Wallis to determine significance and then Dunn's test as a post hoc test to find the significant differences.
+
+library(FSA)
+
+# Perform pairwise Dunn's test for each mvm_id
+# Ensure period is a factor
+
+data_periods <- data_periods %>%
+  mutate(period = as.factor(period))
+
+mvm_ids_sig <- final_table %>% filter((kruskal_p_value < 0.05)) %>% select(mvm_id)
+# Perform Dunn's test for each mvm_id
+pairwise_results <- data_periods %>%
+  arrange(sampling_date) %>%
+  filter(mvm_id %in% mvm_ids_sig$mvm_id) %>%
+  group_by(mvm_id) %>%
+  filter(n_distinct(period) > 1) %>%
+  group_modify(~ {
+    tryCatch(
+      data.frame(
+        dunn_test = list(as.data.frame(dunnTest(org_charge_density ~ period, data = .x, method = "bonferroni")$res))
+      ),
+      error = function(e) data.frame(dunn_test_summary = list(NULL))  # Handle errors
+    )
+  }) %>%
+  ungroup()
+
+
+# View the result
+# pairwise_results %>% filter(dunn_test.P.adj < 0.05)
+
+summary_dunns <- pairwise_results %>% group_by(dunn_test.Comparison) %>%
+  mutate(significant = ifelse(dunn_test.P.adj < 0.05, "Significant", "Not Significant")) %>%
+  count(significant) %>% ungroup() %>%
+  pivot_wider(
+    names_from = significant,  # Create columns based on the 'significant' values
+    values_from = n,           # Populate these columns with values from 'n'
+    values_fill = 0            # Fill missing values with 0
+  )
+
+kable(summary_dunns)
+```
+
+
+```{r}
+#| fig.cap: Organic charge density of all stations
+#| fig.subcap:
+#|      - "Median"
+#|      - "IQR"
+#| layout-ncol: 2
+#| label: fig-box-org_charge_density
+#| 
+ggplot(summary_stats, aes(x = period, y = median, fill = period)) +
+  geom_boxplot() +
+  # geom_text(aes(
+  #   x = period,
+  #   y = max(median, na.rm = TRUE) + 0.002,  # Adjust text position
+  #   label = paste0("sig n: ", sig_n, "\ninsig n: ", insig_n)
+  # ), color = "black", size = 4, position = position_dodge(width = 0.9)) +
+  labs(x = "Period", y = "Median org_charge_density") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+ggplot(summary_stats, aes(x = period, y = iqr, fill = period)) +
+  geom_boxplot() +
+  # geom_text(aes(
+  #   x = period,
+  #   y = max(median, na.rm = TRUE) + 0.002,  # Adjust text position
+  #   label = paste0("sig n: ", sig_n, "\ninsig n: ", insig_n)
+  # ), color = "black", size = 4, position = position_dodge(width = 0.9)) +
+  labs(x = "Period", y = "IQR org_charge_density") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+:::
+
 
 
 ---
 
+
 # Spatial Patterns
 
-change to meadn where normally distributed.
 ```{r}
-#| cache.refresh: true
+#| cache-refresh: false
 # merge response and landuse as one dataframe called all
 all <- data_1 %>%
  group_by(mvm_id) %>% summarise(org_charge_meq_g_C = median(org_charge_density_meq_g_C), median_toc = median(TOC_mg_l), median_sVISa = median(sVISa, na.rm = TRUE)) %>%
@@ -1429,7 +1822,7 @@ all %>% write.csv("../results/r_py/pls_input.csv")
 ::: panel-tabset
 
 ```{python prep for maps}
-#| eval: true
+#| eval: false
 import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Point
@@ -1532,6 +1925,7 @@ map_toc().write_html("../results/reports/maps/map_toc.html", full_html= False,in
 #| fig-alt: Map of TOC mean.
 #| label: fig-map-toc
 #| fig-height: 8
+#| cache-refresh: false
 htmltools::includeHTML("../results/reports/maps/map_toc.html")
 ```
 
@@ -1599,6 +1993,7 @@ map_sVISa().write_html("../results/reports/maps/map_sVISa.html", full_html= Fals
 #| fig-alt: Map of median sVISa.
 #| label: fig-map-sVISa
 #| fig-height: 8
+#| cache-refresh: false
 htmltools::includeHTML( "../results/reports/maps/map_sVISa.html")
 ```
 
@@ -1698,17 +2093,21 @@ map_cd().write_html("../results/reports/maps/map_cd.html", full_html= False,incl
 #| fig-alt: Map of median organisc charge density.
 #| label: fig-map-charge-density
 #| fig-height: 8
+#| cache-refresh: false
 htmltools::includeHTML( "../results/reports/maps/map_cd.html")
 ```
 
 
 :::
 
+
+
 ## Multivariate Spatial Analysis
 
 I chose to use a OPLS instead of a PLS for relating the results to catchment characteristics. Orthogonal Partial Least Squares (OPLS) enables to separately model the variation correlated (predictive) to the factor of interest and the uncorrelated (orthogonal) variation. While performing similarly to PLS, OPLS facilitates easier interpretation. I used the R package [ropls](https://rdrr.io/bioc/ropls/man/opls.html) to perform the below analysis, its the underlying code of the SIMCA software as used in analysis such as [Ehnvall et al., 2023](https://www.sciencedirect.com/science/article/pii/S0048969723037555).
 
 In the OPLS the explantory variables used are catchment characteristics listed in @tbl-catch_char. 
+
 
 ::: {.panel-tabset}
 
@@ -1717,7 +2116,7 @@ In the OPLS the explantory variables used are catchment characteristics listed i
 
 **OPLS**
 ```{r}
-#| cache.refresh: true
+#| cache-refresh: false
 source("../src/sourcecode.R")
 library(ropls)
 library(plotly)
@@ -1733,7 +2132,7 @@ opls.model <- opls(all %>% select(-c(org_charge_meq_g_C,median_sVISa, mvm_id, st
 #|   orthogonal axis is variation not explaining any variation in the response variable.
 #| label: fig-loading-charge-density
 #| fig-alt: OPLS loading plot for Organic charge density.
-#| cache.refresh: true
+#| cache-refresh: false
 
 library(tibble)
 source("../src/sourcecode.R")
@@ -1744,19 +2143,19 @@ plot_loading(opls.model, response_label = "Org. charge density", vip.threshold =
 
 Here a PLS was run instead of an OPLS for comparison
 ```{r}
-#| cache.refresh: true
+#| cache-refresh: false
 pls.model <- opls(all %>% select(-c(org_charge_meq_g_C, median_sVISa, mvm_id, stationName)), all$org_charge_meq_g_C)
 ```
 
 ### sVISa
 
 ```{r}
-#| cache.refresh: true
+#| cache-refresh: false
 opls.model.sVISa <- opls(all %>% filter(median_sVISa > 0) %>% select(-c(org_charge_meq_g_C, mvm_id, median_toc, stationName, median_sVISa)), all %>% filter(median_sVISa > 0) %>% .$median_sVISa, orthoI = 1, predI = 1)
 ```
 
 ```{r}
-#| cache.refresh: true
+#| cache-refresh: false
 #| fig-cap: >
 #|    OPLS loading plot for sVISa. Blue variables indicate a VIP score > 1 while
 #|    black indicate a VIP < 1. The red is the response variable: sVISa. The x 
@@ -1774,7 +2173,7 @@ plot_loading(opls.model.sVISa, response_label = "sVISa", vip.threshold = 1.0, te
 **OPLS**
 ```{r}
 # TOC
-#| cache.refresh: true
+#| cache-refresh: false
 #| fig-cap: OPLS loading plot for organic carbon concentrations. Blue variables indicate a VIP score > 1 while black indicate a VIP < 1. The red is the response variable: organic charge density. The x axis is the predictive axis indicating covariation with the response while the orthogonal axis is variation not explaining any variation in the response variable.  
 #| fig-alt: OPLS loading plot for toc.
 #| label: fig-loading-toc
@@ -1782,7 +2181,7 @@ opls.model.TOC <- opls(all %>% select(-c(org_charge_meq_g_C,median_sVISa, mvm_id
 ```
 
 ```{r}
-#| cache.refresh: true
+#| cache-refresh: false
 plot_loading(opls.model.TOC, response_label = "TOC", vip.threshold = 1.0, text_size = 12)
 ```
 
@@ -1790,14 +2189,14 @@ plot_loading(opls.model.TOC, response_label = "TOC", vip.threshold = 1.0, text_s
 
 
 ```{r}
-#| cache.refresh: true
+#| cache-refresh: false
 pls.model <- opls(all %>% select(-c(org_charge_meq_g_C,median_toc,median_sVISa, mvm_id, stationName)), all$median_toc)
 ```
 
 ### Comparison
 
 ```{r VIP table}
-#| cache.refresh: true
+#| cache-refresh: false
 VIP_all <- enframe(getVipVn(opls.model), name = "Variable", value = "org.charge") %>%  left_join(enframe(getVipVn(opls.model.TOC), name = "Variable", value = "TOC")) %>% left_join(enframe(getVipVn(opls.model.sVISa), name = "Variable", value = "sVISa")) 
 
 loading_oc <- getLoadingMN(opls.model)[,1]         # Values of the vector become the 'Value' column
@@ -1864,7 +2263,7 @@ final_df %>%
 Visualizing how the explantory power changes for the three periods: 1990-1997, 1998-2012, 2013-2024.  
 
 ```{r split data}
-#| cache.refresh: true
+#| cache-refresh: false
 all <- data %>% filter(abs(charge_diff) < 0.5) %>% mutate(sVISa = Abs_F420_5cm/(TOC_mol*12.01))%>% 
 filter(year < 2008)%>% 
  group_by(mvm_id) %>% summarise(org_charge_eq_mg_C = median(org_charge_eq_mg_C), median_toc = median(TOC_mol), median_sVISa = median(sVISa, na.rm = TRUE)) %>%
@@ -1881,7 +2280,7 @@ filter(year < 2008)%>%
 
 ```{r}
 #| eval: false
-#| cache.refresh: true
+#| cache-refresh: false
 p1.cd <- opls(all %>% select(-c(org_charge_eq_mg_C,median_sVISa, mvm_id, stationName)), all$org_charge_eq_mg_C, orthoI = 1, predI = 1)
 ```
 
