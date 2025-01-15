@@ -1166,13 +1166,15 @@ data %>% mutate(year = year(sampling_date), TOC_mg_l = TOC_mol*12.01*1000, org_c
 ```
 
 ```{r}
-#| cache-refresh: false
+#| cache-refresh: true
 #| label: tbl-chemistry
 #| tbl-cap: Water chemistry values measured and modelled for the stations used in this study.
-#| 
+
 library(vtable)
 
-sumtable(data_1, out = "kable") %>% kable_styling(font_size = 10)
+sumtable(data_1, out = "kable", summ=c('notNA(x)',
+                'median(x)',
+                'IQR(x)'), summ.names = c("N", "Median", "IQR")) %>% kable_styling(font_size = 10)
 ```
 
 ::: panel-tabset
@@ -1303,20 +1305,29 @@ plot_variable_distribution <- function(data, variable_name) {
 ```
 
 ```{r}
+data_1 %>% as_tibble()
+
+
+data_1 %>% mutate(mvm_id = as.factor(mvm_id))%>% ggplot( aes(x = mvm_id, y = org_charge)) + 
+  geom_boxplot(outliers = FALSE) + theme(legend.position = "none")
+```
+
+```{r}
 #| fig-cap: Comparison of the distribution of median values for each stations (blue) and inter quantile range (IQR, orange) for each station.
 #| fig-subcap:
 #|      - "sVISa median and IQR distributions"
 #|      - "TOC median and IQR distributions"
 #|      - "Organic charge density median and IQR distributions"
-#|      - "Organic charge median and IQR distribution (in mol of charge per litre)"
+#|      - "Organic charge median and IQR distribution (in mmol of charge per litre"
 #| label: fig-variation
 #| layout-ncol: 2
 
 plot_variable_distribution(data_1, "sVISa")
 plot_variable_distribution(data_1, "TOC_mg_l")
 plot_variable_distribution(data_1, "org_charge_density_meq_g_C")
-plot_variable_distribution(data_1, "org_charge")
+plot_variable_distribution(data_1 %>% mutate(org_charge_mmol_l = org_charge *1000), "org_charge_mmol_l")
 ```
+
 
 **So how big are these changes in charge density?**
 
@@ -1365,7 +1376,7 @@ The three periods are:
 For each stations we split the data into these three periods, then we test the data within each stations for changes between the periods using Kruskal-Wallis. 
 
 ```{r}
-#| cache-refresh: false
+#| cache-refresh: true
 #| label: tbl-chemistry-periods
 #| tbl-cap: Water chemistry values measured and modelled for the stations used in this study.
 
@@ -1381,7 +1392,9 @@ data_periods <- data_1 %>%
   )
 
 # Get an overview by period
-data_periods %>% sumtable(., group = "period", out = "kable") %>% kable_styling(font_size = 10)
+data_periods %>% sumtable(., group = "period", out = "kable",summ=c('notNA(x)',
+                'median(x)',
+                'IQR(x)'), summ.names= c("N", "Median", "IQR")) %>% kable_styling(font_size = 10)
 ```
 ## Significant Testing
 
@@ -1446,7 +1459,7 @@ ggplot(summary_significance, aes(x = significant, y = n, fill = significant)) +
   theme_minimal()
 ```
 ```{r}
-#| cache-refresh: false
+#| cache-refresh: true
 #| label: tbl-sVISa-significance
 #| tbl-cap: sVISa significance using Kruskal Wallis to determine significance and then Dunn's test as a post hoc test to find the significant differences.
 
@@ -1489,6 +1502,31 @@ summary_dunns <- pairwise_results %>% group_by(dunn_test.Comparison) %>%
   )
 
 kable(summary_dunns)
+```
+
+```{r}
+#| fig.cap: sVISa changes between periods. Only stations for which Kruskall-Wallis test found a significant difference between periods are included.
+#| label: fig-bar-sVISa
+
+library(forcats)
+pairwise_results %>% left_join(stations %>% select(mvm_id, stationCoordinateY)) %>% mutate(significance = case_when(
+    dunn_test.P.adj >= 0.05~ "not_sig", 
+    dunn_test.P.adj < 0.05 & dunn_test.Z < 0 ~ "sig_increase",
+    dunn_test.P.adj < 0.05 & dunn_test.Z > 0 ~ "sig_decrease")) %>%
+  complete(mvm_id, dunn_test.Comparison, fill = list(significance = "no data"))  %>% 
+  mutate(mvm_id = fct_reorder(as.factor(mvm_id), stationCoordinateY)) %>% 
+  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997 - 1998-2012", "1998-2012 - 2012-2024", "1990-1997 - 2012-2024")) -> pairwise_results
+
+ggplot(pairwise_results, aes(x = as.factor(mvm_id), fill = significance)) +
+  geom_bar(position = "fill") +
+  facet_wrap(~ dunn_test.Comparison) +
+  labs(x = "Station (mvm_id)", y = "Proportion", fill = "Significance") +
+  theme_minimal() +
+  scale_fill_manual(values = c("sig_increase" = "#D55E00", "sig_decrease" = "#56B4E9", "not_sig" = "#F0E442", "no data" = 'white')) +
+  coord_flip() +
+  ylab("Dunn's test")+
+  xlab("Stations")+
+    theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), axis.text = element_text(size = 4.5))
 ```
 
 
@@ -1583,7 +1621,7 @@ ggplot(summary_significance, aes(x = significant, y = n, fill = significant)) +
   theme_minimal()
 ```
 ```{r}
-#| cache-refresh: false
+#| cache-refresh: true
 #| label: tbl-TOC-significance
 #| tbl-cap: TOC significance using Kruskal Wallis to determine significance and then Dunn's test as a post hoc test to find the significant differences.
 
@@ -1628,6 +1666,30 @@ summary_dunns <- pairwise_results %>% group_by(dunn_test.Comparison) %>%
 kable(summary_dunns)
 ```
 
+```{r}
+#| fig.cap: TOC changes between periods. Only stations for which Kruskall-Wallis test found a significant difference between periods are included.
+#| label: fig-bar-TOC
+
+library(forcats)
+pairwise_results %>% mutate(significance = case_when(
+    dunn_test.P.adj >= 0.05~ "not_sig", 
+    dunn_test.P.adj < 0.05 & dunn_test.Z < 0 ~ "sig_increase",
+    dunn_test.P.adj < 0.05 & dunn_test.Z > 0 ~ "sig_decrease")) %>%
+  complete(mvm_id, dunn_test.Comparison, fill = list(significance = "no data")) %>% left_join(stations %>% select(mvm_id, stationCoordinateY)) %>% 
+  mutate(mvm_id = fct_reorder(as.factor(mvm_id), stationCoordinateY)) %>% 
+  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997 - 1998-2012", "1998-2012 - 2012-2024", "1990-1997 - 2012-2024")) -> pairwise_results
+
+ggplot(pairwise_results, aes(x = as.factor(mvm_id), fill = significance)) +
+  geom_bar(position = "fill") +
+  facet_wrap(~ dunn_test.Comparison) +
+  labs(x = "Station (mvm_id)", y = "Proportion", fill = "Significance") +
+  theme_minimal() +
+  scale_fill_manual(values = c("sig_increase" = "#D55E00", "sig_decrease" = "#56B4E9", "not_sig" = "#F0E442", "no data" = 'white')) +
+  coord_flip() +
+  ylab("Dunn's test")+
+  xlab("Stations") + 
+  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), axis.text = element_text(size = 4.5))
+```
 
 ```{r}
 #| fig.cap: TOC of all stations
@@ -1721,7 +1783,7 @@ ggplot(summary_significance, aes(x = significant, y = n, fill = significant)) +
   theme_minimal()
 ```
 ```{r}
-#| cache-refresh: false
+#| cache-refresh: true
 #| label: tbl-org_charge_density-significance
 #| tbl-cap: org_charge_density significance using Kruskal Wallis to determine significance and then Dunn's test as a post hoc test to find the significant differences.
 
@@ -1766,6 +1828,29 @@ summary_dunns <- pairwise_results %>% group_by(dunn_test.Comparison) %>%
 kable(summary_dunns)
 ```
 
+```{r}
+#| fig.cap: Organic charge density changes between periods. Only stations for which Kruskall-Wallis test found a significant difference between periods are included.
+#| label: fig-bar-org_density
+
+library(forcats)
+pairwise_results %>% mutate(significance = case_when(
+    dunn_test.P.adj >= 0.05~ "not_sig", 
+    dunn_test.P.adj < 0.05 & dunn_test.Z < 0 ~ "sig_increase",
+    dunn_test.P.adj < 0.05 & dunn_test.Z > 0 ~ "sig_decrease")) %>%
+  complete(mvm_id, dunn_test.Comparison, fill = list(significance = "no data")) %>% left_join(stations %>% select(mvm_id, stationCoordinateY)) %>% 
+  mutate(mvm_id = fct_reorder(as.factor(mvm_id), stationCoordinateY)) %>% 
+  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997 - 1998-2012", "1998-2012 - 2012-2024", "1990-1997 - 2012-2024")) -> pairwise_results
+
+ggplot(pairwise_results, aes(x = as.factor(mvm_id), fill = significance)) +
+  geom_bar(position = "fill") +
+  facet_wrap(~ dunn_test.Comparison) +
+  labs(x = "Station (mvm_id)", y = "Proportion", fill = "Significance") +
+  theme_minimal() +
+  scale_fill_manual(values = c("sig_increase" = "#D55E00", "sig_decrease" = "#56B4E9", "not_sig" = "#F0E442", "no data" = 'white')) +
+  coord_flip() +
+  ylab("Dunn's test")+
+  xlab("Stations") + theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), axis.text = element_text(size = 4.5))
+```
 
 ```{r}
 #| fig.cap: Organic charge density of all stations
@@ -1799,7 +1884,6 @@ ggplot(summary_stats, aes(x = period, y = iqr, fill = period)) +
 ```
 
 :::
-
 
 
 ---
