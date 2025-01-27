@@ -1,17 +1,24 @@
 ---
-title: "Charge_density calculations"
-author: Anna Lackner
+title: "FOMA Organic Charge Desnity"
+author: "Anna Lackner"
 date: today
 format:
-    html:
-        embed-resources: false
-        toc: true
-        toc-depth: 3
-        warning: false
-        smooth-scroll: true
-        code-fold: true
-        theme: lux
+  html:
+    embed-resources: false
+    toc: true
+    toc-depth: 3
+    smooth-scroll: true
+    code-fold: true
+    theme: lux
+    number-sections: true
+  docx: 
+    toc: true
+    toc-depth: 3
+    number-sections: true
+css: style.css
 execute: 
+  echo: false
+  warning: false
   cache: true
   freeze: true
   keep-md: true
@@ -33,7 +40,7 @@ library(tidyverse)
 
 In [Eklöf et al, 2020](https://www.sciencedirect.com/science/article/pii/S0043135421007405?via%3Dihub) trends in TOC and SVISa were found to cease  increasing around 2000-2010 widespread across the country.  
 
-::: panel-tabset
+---
 
 ```{r}
 library(tidyverse)
@@ -235,6 +242,7 @@ knitr::include_graphics(path = c("figures/sVISa_proportion.png","figures/sVISa_p
 #| fig-alt: sVISa lasange plot of trends plot.
 #| label: fig-sVISa-lasange
 #| layout-ncol: 2
+#| fig-height: 8
 knitr::include_graphics(path = c("figures/sVISa_lasange.png","figures/sVISa_lasange_selected.png" ), error = FALSE)
 ```
 
@@ -395,12 +403,12 @@ if (re.read != 're fig' & exists("trendplotdata_selected_TOC")){
 #| fig-alt: TOC proportion of trends plot.
 #| label: fig-TOC-lasnage
 #| layout-ncol: 2
+#| fig-height: 8
 knitr::include_graphics(path = c("figures/TOC_lasange.png","figures/TOC_lasange_selected.png"), error = FALSE)
 ```
 
-:::
-
 ---
+
 
 ## Methodology
 The following steps were performed to get final values of charge density (charge per mg of carbon). 
@@ -422,110 +430,14 @@ The following steps were performed to get final values of charge density (charge
 - Stations with more than 5% Urban area were excluded from the download. 
 - Data for 316 stations were downloaded of these 136 were used in the end as they had data from SLU's lab and could be sufficiently modelled using Visual Minteq and are shown on a map @fig-map-stations, while the number of samples available are shown in @fig-hist_stations.
  
-
-```{python }
-#| echo: false
-#| jupyter_compat: true
-#| eval: false
-import pandas as pd
-import geopandas as gpd
-from shapely.geometry import Point
-import plotly.express as px
-import plotly.io as pio
-
-# import plotly.io as pio
-# pio.renderers.default = "plotly_mimetype+notebook_connected"
-
-# Path to the CSV file
-file_path = "../results/r_py/pls_input.csv"
-
-# # Load the CSV file into a DataFrame
-df = pd.read_csv(file_path)
-
-
-# Step 2: Convert to GeoDataFrame with SWEREF 99TM CRS
-geometry = [Point(xy) for xy in zip(df["stationCoordinateX"], df["stationCoordinateY"])]
-stations_gdf = gpd.GeoDataFrame(df, geometry=geometry, crs="EPSG:3006")  # SWEREF 99TM CRS
-
-# Step 3: Load Sweden shapefile and ensure it's in SWEREF 99TM
-sweden_shapefile = "../input/shapefiles/Sweden.zip"
-sweden_gdf = gpd.read_file(f"zip://{sweden_shapefile}")
-
-sweden_gdf = sweden_gdf.to_crs("EPSG:4326")
-sweden_geojson = sweden_gdf.__geo_interface__
-
-lakes_shapefile = "../input/shapefiles/Swedish_Lakes.zip"
-lakes_gdf = gpd.read_file(f"zip://{lakes_shapefile}")
-
-lakes_gdf = lakes_gdf.to_crs("EPSG:4326")
-lakes_geojson = lakes_gdf.__geo_interface__
-
-
-# Extract coordinates from the GeoDataFrame for Plotly
-stations_gdf = stations_gdf.to_crs("EPSG:4326")
-stations_gdf["lon"] = stations_gdf.geometry.x
-stations_gdf["lat"] = stations_gdf.geometry.y
-stations_gdf["area_km2"] = stations_gdf["area_ARO_m2"] / (1000000)
-#stations_gdf["org_charge_eq_g_C"] = stations_gdf["org_charge_eq_mg_C"] * 1000
-# Convert Sweden boundary GeoDataFrame to GeoJSON for base map overlay
-
-
-def map_stations():
-  # Create an interactive map
-  fig = px.scatter_map(
-      stations_gdf,
-      lat="lat",
-      lon="lon",
-      color="area_km2",  # Column to determine color
-      color_continuous_scale="Viridis",  # Color scale (can be adjusted)
-      zoom=3.5,  # Adjust zoom level as needed
-      map_style="white-bg",
-      title="Stations with more than 5 samples",
-      custom_data=['mvm_id', "stationName", "area_km2","mean_annual_temp", "annual_precip" ]
-  )
-
-  fig = fig.update_traces(hovertemplate="MMV ID:  %{customdata[0]} <br>Station name: %{customdata[1]} <br>Area (km2): %{customdata[2]:.0f} <br>MAT (C): %{customdata[3]:.2f} <br>Annual Precipitation (mm): %{customdata[4]:.0f}",
-  marker=dict(size=10))
-
-
-  fig.update_layout(
-      map={
-          "layers": [
-              {
-                  "source": sweden_geojson,
-                  "type": "line",
-                  "color": "black",
-                  "line": {"width": 1},
-              },
-              {
-                  "source": lakes_geojson,
-                  "type": "line",
-                  "color": "grey",
-                  "line": {"width": 1},
-              }
-          ]
-      },
-      title={"x": 0.5},
-      width=500,  # Set width of the plot
-      height=600,  # Center the title
-      margin={"r": 0, "t": 40, "l": 0, "b": 0},  # Adjust margins
-  )
-
-  return(fig)
-
-
-map_stations().write_html("../results/reports/maps/map_stations.html", full_html= False,include_plotlyjs = True )
-```
-
-
 ```{r}
 #| echo: false
-#| fig-cap: Stations with available data that were sucessfully modelled in this study
+#| fig-cap: 136 stations with available data that were sucessfully modelled in this study. The size of the marker is related to the size of the color while the color shows the mean specific discharge (left), the annual precipitation (middle), and the annual mean tempertaur(right) of the catchment of the station.
 #| fig-alt: Map of stations
 #| label: fig-map-stations
-#| fig-height: 8
-#| cache-refresh: false
-htmltools::includeHTML("../results/reports/maps/map_stations.html")
+#| out-width: 100%
+#| cache-refresh: true
+knitr::include_graphics("../results/reports/maps/map_stations.png")
 ```
 
 ---
@@ -537,7 +449,7 @@ htmltools::includeHTML("../results/reports/maps/map_stations.html")
 - In addition we removed all samples that were not analyzed in the SLU lab (some samples did not have the field analysis lab field filled in. These were also excluded.) 
 
 ```{r}
-#| echo: true
+#| echo: false
 #| fig-width: 5 
 #| fig-height: 4
 #| fig-cap: Histogram of number of samples per station used in further analysis. There are 42 907 samples across 187 stations. In further analysis only stations with more than 5 samples were considered, reducing the number of stations to 173.
@@ -643,9 +555,9 @@ $$
 Visual Minteq uses ADOM/DOC to model the charge on the organic matter for each sample. Once the ADOM/DOC was determined for each sample the corresponding organic charge was used to calculate the charge density.
 
 
-:::panel-tabset
+--- 
 
-#### ADOM/DOC
+## ADOM/DOC
 ```{r}
 #| fig-cap: Histogram of ADOM/DOC for samples before and after filtering for 173 stations (number of samples > 5).  
 #| fig-alt: Histogram of ADOM/DOC.
@@ -670,7 +582,7 @@ ggplot(data %>% filter(abs(charge_diff) < 0.5), aes(x = adom_doc)) +
   theme_minimal()
 ```
 
-#### Charge density
+## Charge density
 
 Charge density was calculated using the organic charge of the best fit ADOM/DOC for each sample and the concentration of TOC of the sample.
 
@@ -701,15 +613,14 @@ ggplot(data %>% filter(abs(charge_diff) < 0.5), aes(x = org_charge_eq_mg_C)) +
   theme_minimal()
 ```
 
-:::
-
 ---
+
 
 # Catchment Characteristics
 
-::: panel-tabset
+---
 
-#### Soil Depth
+## Soil Depth
 
 [SGU SOil Depth Raster map](https://www.sgu.se/en/products/maps/map-viewer/jordkartvisare/soil-depth/)
 
@@ -718,7 +629,7 @@ library(tidyverse)
 soil_depth <- read.csv("../input/catchment_characteristics/soil_depth.csv") %>% mutate(soil_depth_iqr = X75th_percentile - X25th_percentile, soil_depth_mean = mean) %>% select(mvm_id, soil_depth_iqr, soil_depth_mean) %>% filter(mvm_id %in% mvm_ids)%>% mutate(mvm_id = as.factor(mvm_id))
 ```
 
-#### Landuse
+## Landuse
 
 [NMD Land use data](https://www.naturvardsverket.se/4a43ca/contentassets/37e8b38528774982b5840554f02a1f81/produktbeskrivning-nmd-2018-basskikt-v2-2.pdf)
 
@@ -726,7 +637,7 @@ soil_depth <- read.csv("../input/catchment_characteristics/soil_depth.csv") %>% 
 landuse <- read.csv("../input/catchment_characteristics/PLC8_landuse.csv") %>% filter(mvm_id %in% mvm_ids) %>% mutate(mvm_id = as.factor(mvm_id))
 ```
 
-#### Climate
+## Climate
 
 [SMHI PT-HBV Climate drided data](https://www.smhi.se/data/ladda-ner-data/griddade-nederbord-och-temperaturdata-pthbv)
 
@@ -809,7 +720,7 @@ ggboxplot(climate_all ,x = "period", y = "annual_precip",
 ```
 
 
-#### Discharge
+## Discharge
 
 [SMHI S-HYPE](https://www.smhi.se/data/hydrologi/vattenwebb/data-for-delavrinningsomraden-sotvatten-1.118236)
 
@@ -914,109 +825,7 @@ pwc <- discharge_all %>%
 ```
 
 
-```{python}
-#| jupyter_compat: true
-#| eval: false
-import pandas as pd
-import geopandas as gpd
-from shapely.geometry import Point
-import plotly.express as px
-import plotly.io as pio
-
-# import plotly.io as pio
-# pio.renderers.default = "plotly_mimetype+notebook_connected"
-
-# Path to the CSV file
-file_path = "../results/r_py/pls_input.csv"
-
-# # Load the CSV file into a DataFrame
-df = pd.read_csv(file_path)
-
-
-# Step 2: Convert to GeoDataFrame with SWEREF 99TM CRS
-geometry = [Point(xy) for xy in zip(df["stationCoordinateX"], df["stationCoordinateY"])]
-stations_gdf = gpd.GeoDataFrame(df, geometry=geometry, crs="EPSG:3006")  # SWEREF 99TM CRS
-
-# Step 3: Load Sweden shapefile and ensure it's in SWEREF 99TM
-sweden_shapefile = "../input/shapefiles/Sweden.zip"
-sweden_gdf = gpd.read_file(f"zip://{sweden_shapefile}")
-
-sweden_gdf = sweden_gdf.to_crs("EPSG:4326")
-sweden_geojson = sweden_gdf.__geo_interface__
-
-lakes_shapefile = "../input/shapefiles/Swedish_Lakes.zip"
-lakes_gdf = gpd.read_file(f"zip://{lakes_shapefile}")
-
-lakes_gdf = lakes_gdf.to_crs("EPSG:4326")
-lakes_geojson = lakes_gdf.__geo_interface__
-
-
-# Extract coordinates from the GeoDataFrame for Plotly
-stations_gdf = stations_gdf.to_crs("EPSG:4326")
-stations_gdf["lon"] = stations_gdf.geometry.x
-stations_gdf["lat"] = stations_gdf.geometry.y
-stations_gdf["area_km2"] = stations_gdf["area_ARO_m2"] / (1000000)
-#stations_gdf["org_charge_eq_g_C"] = stations_gdf["org_charge_eq_mg_C"] * 1000
-# Convert Sweden boundary GeoDataFrame to GeoJSON for base map overlay
-
-
-def map_stations():
-  # Create an interactive map
-  fig = px.scatter_map(
-      stations_gdf,
-      lat="lat",
-      lon="lon",
-      color="mean_Q_spec",  # Column to determine color
-      color_continuous_scale="Viridis",  # Color scale (can be adjusted)
-      zoom=3.5,  # Adjust zoom level as needed
-      map_style="white-bg",
-      title="Stations with more than 5 samples",
-      custom_data=['mvm_id', "stationName", "area_km2","mean_annual_temp", "annual_precip", "mean_Q_spec" ]
-  )
-
-  fig = fig.update_traces(hovertemplate="MMV ID:  %{customdata[0]} <br>Station name: %{customdata[1]} <br>Area (km2): %{customdata[2]:.0f} <br>MAT (C): %{customdata[3]:.2f} <br>Annual Precipitation (mm): %{customdata[4]:.0f} <br>Mean spec. discharge: %{customdata[5]:.4f}",
-  marker=dict(size=10))
-
-
-  fig.update_layout(
-      map={
-          "layers": [
-              {
-                  "source": sweden_geojson,
-                  "type": "line",
-                  "color": "black",
-                  "line": {"width": 1},
-              },
-              {
-                  "source": lakes_geojson,
-                  "type": "line",
-                  "color": "grey",
-                  "line": {"width": 1},
-              }
-          ]
-      },
-      title={"x": 0.5},
-      width=500,  # Set width of the plot
-      height=600,  # Center the title
-      margin={"r": 0, "t": 40, "l": 0, "b": 0},  # Adjust margins
-  )
-
-  return(fig)
-
-map_stations().write_html("../results/reports/maps/map_discharge.html", full_html= False,include_plotlyjs = True )
-```
-
-
-```{r}
-#| fig-cap: Specific discharge of stations included in this study. 
-#| fig-alt: Map of discharge.
-#| label: fig-map-discharge
-#| fig-height: 8
-#| cache-refresh: false
-htmltools::includeHTML("../results/reports/maps/map_discharge.html")
-```
-
-#### NDVI
+## NDVI
 
 [NDVI](https://www.usgs.gov/landsat-missions/landsat-normalized-difference-vegetation-index)
 
@@ -1090,7 +899,7 @@ ggboxplot(ndvi_periods %>% filter(mvm_id != 43) ,x = "period", y = "summer_NDVI"
 ```
 
 
-#### Peat Area
+## Peat Area
 
 [SLU Peat Map](https://www.slu.se/en/environment/statistics-and-environmental-data/search-for-open-environmental-data/comprehensive-peat-map-of-the-forest-land/#downloadInfo)
 
@@ -1120,7 +929,7 @@ ggplot(df_long, aes(x = Variable, y = Value, fill = Variable)) +
   ) 
 ```
 
-:::
+---
 
 
 
@@ -1150,7 +959,7 @@ catch_char <- landuse %>%
 
 library(vtable)
 
-sumtable(catch_char %>% select(-mvm_id), out ="kable", digits = 3) %>% kable_styling(font_size = 10)
+sumtable(catch_char %>% select(-mvm_id), out ="kable", digits = 3) # %>% kable_styling(font_size = 10)
 ```
 
 ---
@@ -1162,22 +971,58 @@ In this section we test for normality of the data, compare the variation within 
 ```{r}
 #| cache-refresh: false
 data %>% filter(abs(charge_diff) < 0.5) %>% mutate(sVISa = Abs_F420_5cm/(TOC_mol*12.01*1000)) -> data
-data %>% mutate(year = year(sampling_date), TOC_mg_l = TOC_mol*12.01*1000, org_charge_density_meq_g_C = org_charge_eq_mg_C * 1000*1000) %>% select(year,EC_mS_m, sVISa,org_charge_density_meq_g_C,TOC_mg_l,SO4_mol,Alk_Acid_mol, sampling_date, Abs_F420_5cm, mvm_id, adom_doc, charge_diff, org_charge, Sum.of.cations, pH_, Ionic.strength, sample_id) -> data_1
+data %>% mutate(year = year(sampling_date), TOC_mg_l = TOC_mol*12.01*1000, org_charge_density_meq_g_C = org_charge_eq_mg_C * 1000*1000,`Al3+ (µmol/l)` = Al.3 *1000000, `Si (mmol/l)` = Si_mol* 1000, `Cl (mmol/l)` = Cl_mol*1000, `Al total (µmol/l)` = Al_mol * 1000000, `F (µmol/l)` = Fluorid_mol *1000000) %>% select(year,EC_mS_m, sVISa,org_charge_density_meq_g_C,TOC_mg_l,SO4_mol,Alk_Acid_mol, sampling_date, Abs_F420_5cm, mvm_id, adom_doc, charge_diff, org_charge, Sum.of.cations, pH_, Ionic.strength, sample_id, `Al3+ (µmol/l)`, `Si (mmol/l)`, `Cl (mmol/l)`,`Al total (µmol/l)`,`F (µmol/l)`) -> data_1
 ```
+
+```{r}
+#| label: calc-weigths
+library(dplyr)
+library(ggplot2)
+library(matrixStats)
+library(PSCBS)
+
+# Calculate the weights for each station
+weights <- data_1 %>%
+  group_by(mvm_id) %>%
+  summarise(weight = 1 / n()) %>%
+  ungroup()
+
+# Merge weights with the original data
+data_1_with_weights <- data_1 %>%
+  left_join(weights, by = "mvm_id")
+```
+
+
 
 ```{r}
 #| cache-refresh: true
 #| label: tbl-chemistry
-#| tbl-cap: Water chemistry values measured and modelled for the stations used in this study.
-
+#| tbl-cap: Water chemistry values measured and modelled for the stations used in this study, weighted porportional to number of samples for each station. 
 library(vtable)
-
-sumtable(data_1, out = "kable", summ=c('notNA(x)',
-                'median(x)',
-                'IQR(x)'), summ.names = c("N", "Median", "IQR")) %>% kable_styling(font_size = 10)
+library(matrixStats)
+sumtable(data_1_with_weights %>% mutate(
+  `SO4 (mmol/l)` = SO4_mol *1000,
+  `Alk Acid (mmol/l)` = Alk_Acid_mol *1000,
+  `Organic charge (meq/l)` = org_charge*1000, 
+  `Sum of Cations (mmol/l)` = Sum.of.cations*1000
+  )%>% select(-c(
+    SO4_mol, charge_diff, Alk_Acid_mol, org_charge, Sum.of.cations, sample_id, mvm_id, weight
+    )) %>% rename(
+      `TOC (mg/l)` = TOC_mg_l,
+      `Org. Charge Density (meq/g of C)` = org_charge_density_meq_g_C,
+      `EC (mS/M)` = EC_mS_m,
+      `Absorbance 420mm` = Abs_F420_5cm, 
+      `ADOM/DOC` = adom_doc,
+      `Ionic strength` = Ionic.strength, 
+      `Field pH` = pH_
+    ), out = "kable", group.weights = data_1_with_weights$weight,summ=c('notNA(x)',
+                'reldist::wtd.quantile (x, q=0.50, na.rm = TRUE, weight = wts)',
+                'reldist::wtd.quantile (x, q=0.75, na.rm = TRUE, weight = wts) - reldist::wtd.quantile (x, q=0.25, na.rm = TRUE, weight = wts)', 'reldist::wtd.quantile (x, q=0, na.rm = TRUE, weight = wts)', 'reldist::wtd.quantile (x, q=1, na.rm = TRUE, weight = wts)'), summ.names = c("N", "Median", "IQR", "min", "max")) # %>% kable_styling(font_size = 10)
 ```
 
-::: panel-tabset
+
+
+---
 
 ## Normality
 
@@ -1191,7 +1036,7 @@ plot_norm <- function(var, name = "Variable", breaks = 100){
 }
 ```
 
-::: panel-tabset
+---
 
 ### sVISa
 
@@ -1255,7 +1100,7 @@ plot_norm(log(-data_1$org_charge_density_meq_g_C), name = "log (Organic charge d
 
 I would have said that they are all pretty close to normal distribution as long as we use log(TOC). They are not perfect though so a non-parametric test is also a good option to be safe. Since we have previously looked at this with Ted and agreed with him that a non-parametric test is appropriate I will go on using non-parametric tests and consider these not normally distributed. 
 
-:::
+---
 
 
 
@@ -1304,13 +1149,111 @@ plot_variable_distribution <- function(data, variable_name) {
 }
 ```
 
+---
+
+### TOC
 ```{r}
-data_1 %>% as_tibble()
+#| fig-cap: Boxplot for each of the stations sample distribution of TOC. The blue box is the weighted IQR for all the stations, with the red dashed line as the weighted median for all the stations. 
+#| label: fig-variation-toc
 
 
-data_1 %>% mutate(mvm_id = as.factor(mvm_id))%>% ggplot( aes(x = mvm_id, y = org_charge)) + 
-  geom_boxplot(outliers = FALSE) + theme(legend.position = "none")
+# Calculate the weighted median, 25th percentile, and 75th percentile
+weighted_median <- weightedMedian(data_1_with_weights$TOC_mg_l, w = data_1_with_weights$weight, na.rm = TRUE)
+weighted_25th <- weightedQuantile(data_1_with_weights$TOC_mg_l, w = data_1_with_weights$weight, probs = 0.25, na.rm = TRUE)
+weighted_75th <- weightedQuantile(data_1_with_weights$TOC_mg_l, w = data_1_with_weights$weight, probs = 0.75, na.rm = TRUE)
+
+# Create the boxplot and add the horizontal lines for the weighted median, 25th, and 75th percentiles
+data_1 %>%
+  mutate(mvm_id = as.factor(mvm_id)) %>%
+  ggplot(aes(x = mvm_id, y = TOC_mg_l)) +
+  geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = weighted_25th, ymax = weighted_75th), fill = "lightblue", alpha = 0.2) +
+  geom_hline(yintercept = weighted_median, linetype = "dashed", color = "red") +
+  geom_hline(yintercept = weighted_25th, linetype = "dotted", color = "blue") +
+  geom_hline(yintercept = weighted_75th, linetype = "dotted", color = "blue") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  geom_boxplot(outlier.shape = NA, alpha = 0.5 ) +
+  labs(y = "TOC (mg/l)", x = "Station")+
+  theme(axis.text.x = element_blank())
 ```
+
+### sVISa
+```{r}
+#| fig-cap: Boxplot for each of the stations sample distribution of sVISa. The blue box is the weighted IQR for all the stations, with the red dashed line as the weighted median for all the stations. 
+#| label: fig-variation-sVISa
+# Calculate the weighted median, 25th percentile, and 75th percentile
+weighted_median <- weightedMedian(data_1_with_weights$TOC_mg_l, w = data_1_with_weights$weight, na.rm = TRUE)
+weighted_25th <- weightedQuantile(data_1_with_weights$TOC_mg_l, w = data_1_with_weights$weight, probs = 0.25, na.rm = TRUE)
+weighted_75th <- weightedQuantile(data_1_with_weights$TOC_mg_l, w = data_1_with_weights$weight, probs = 0.75, na.rm = TRUE)
+
+# Create the boxplot and add the horizontal lines for the weighted median, 25th, and 75th percentiles
+data_1 %>%
+  mutate(mvm_id = as.factor(mvm_id)) %>%
+  ggplot(aes(x = mvm_id, y = TOC_mg_l)) +
+  geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = weighted_25th, ymax = weighted_75th), fill = "lightblue", alpha = 0.2) +
+  geom_hline(yintercept = weighted_median, linetype = "dashed", color = "red") +
+  geom_hline(yintercept = weighted_25th, linetype = "dotted", color = "blue") +
+  geom_hline(yintercept = weighted_75th, linetype = "dotted", color = "blue") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  geom_boxplot(outlier.shape = NA, alpha = 0.5 ) +
+  labs(y = "TOC (mg/l)", x = "Station")+
+  theme(axis.text.x = element_blank())
+```
+
+### Organic charge density
+```{r}
+#| fig-cap: Boxplot for each of the stations sample distribution of organic charge density. The blue box is the weighted IQR for all the stations, with the red dashed line as the weighted median for all the stations. 
+#| label: fig-variation-org-charge-density
+
+# Calculate the weighted median, 25th percentile, and 75th percentile
+weighted_median <- weightedMedian(data_1_with_weights$org_charge_density_meq_g_C, w = data_1_with_weights$weight, na.rm = TRUE)
+weighted_25th <- weightedQuantile(data_1_with_weights$org_charge_density_meq_g_C, w = data_1_with_weights$weight, probs = 0.25, na.rm = TRUE)
+weighted_75th <- weightedQuantile(data_1_with_weights$org_charge_density_meq_g_C, w = data_1_with_weights$weight, probs = 0.75, na.rm = TRUE)
+
+# Create the boxplot and add the horizontal lines for the weighted median, 25th, and 75th percentiles
+data_1 %>%
+  mutate( mvm_id = as.factor(mvm_id)) %>%
+  ggplot(aes(x = mvm_id, y = org_charge_density_meq_g_C)) +
+  geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = weighted_25th, ymax = weighted_75th), fill = "lightblue", alpha = 0.2) +
+  geom_hline(yintercept = weighted_median, linetype = "dashed", color = "red") +
+  geom_hline(yintercept = weighted_25th, linetype = "dotted", color = "blue") +
+  geom_hline(yintercept = weighted_75th, linetype = "dotted", color = "blue") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  geom_boxplot(outlier.shape = NA, alpha = 0.5 ) +
+  labs(y = "Org Charge Density (mmeq/g of C)", x = "Station")+
+  theme(axis.text.x = element_blank())
+```
+
+### Organic charge
+
+```{r}
+#| fig-cap: Boxplot for each of the stations sample distribution of organic charge. The blue box is the weighted IQR for all the stations, with the red dashed line as the weighted median for all the stations. 
+#| label: fig-variation-org-charge
+
+# Calculate the weighted median, 25th percentile, and 75th percentile
+weighted_median <- weightedMedian(data_1_with_weights$org_charge * 1000, w = data_1_with_weights$weight, na.rm = TRUE)
+weighted_25th <- weightedQuantile(data_1_with_weights$org_charge * 1000, w = data_1_with_weights$weight, probs = 0.25, na.rm = TRUE)
+weighted_75th <- weightedQuantile(data_1_with_weights$org_charge * 1000, w = data_1_with_weights$weight, probs = 0.75, na.rm = TRUE)
+
+# Create the boxplot and add the horizontal lines for the weighted median, 25th, and 75th percentiles
+data_1 %>%
+  mutate(org_charge_mmol_l = org_charge * 1000, mvm_id = as.factor(mvm_id)) %>%
+  ggplot(aes(x = mvm_id, y = org_charge_mmol_l)) +
+  geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = weighted_25th, ymax = weighted_75th), fill = "lightblue", alpha = 0.2) +
+  geom_hline(yintercept = weighted_median, linetype = "dashed", color = "red") +
+  geom_hline(yintercept = weighted_25th, linetype = "dotted", color = "blue") +
+  geom_hline(yintercept = weighted_75th, linetype = "dotted", color = "blue") +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  geom_boxplot(outlier.shape = NA, alpha = 0.5 ) +
+  labs(y = "Org Charge (mmol/l)", x = "Station")+
+  theme(axis.text.x = element_blank())
+```
+
+
+---
 
 ```{r}
 #| fig-cap: Comparison of the distribution of median values for each stations (blue) and inter quantile range (IQR, orange) for each station.
@@ -1349,7 +1292,7 @@ Taking the mean TOC concentration and median organic charge density of all sampl
 ```{r}
 #| fig-cap: "Correlation matrix using spearman (non-parametric) correlation to calculate correlation and significance of p < 0.05. Crossed out field indicate no significant correlation with p > 0.05. The area and color of the circle indicate the correlation coefficent."
 #| label: fig-corrmatrix
-#| fig-heigth: 12
+#| out-width: 100%
 
 library(corrplot)
 library(Hmisc)
@@ -1358,10 +1301,9 @@ res2 <- rcorr(as.matrix(data_1 %>% select(-c(sampling_date, sample_id, mvm_id)))
 
 diag(res2$P) <- 0 # fill in the diagonal with 0 (perfect siginficance)
 
-corrplot(res2$r, order="hclust", type = 'upper', p.mat = res2$P,sig.level = 0.05, insig = "pch", tl.col = "black", method = 'pie', outline = 'white')
+corrplot(res2$r, order="hclust", type = 'upper', p.mat = res2$P,sig.level = 0.05, insig = "pch", tl.col = "black", method = 'pie', outline = 'white', tl.cex = 0.5)
 ```
 
-:::
 ---
 
 # Temporal Patters
@@ -1376,10 +1318,6 @@ The three periods are:
 For each stations we split the data into these three periods, then we test the data within each stations for changes between the periods using Kruskal-Wallis. 
 
 ```{r}
-#| cache-refresh: true
-#| label: tbl-chemistry-periods
-#| tbl-cap: Water chemistry values measured and modelled for the stations used in this study.
-
 library(vtable)
 data_periods <- data_1 %>% 
   mutate(
@@ -1391,19 +1329,216 @@ data_periods <- data_1 %>%
     )
   )
 
-# Get an overview by period
-data_periods %>% sumtable(., group = "period", out = "kable",summ=c('notNA(x)',
-                'median(x)',
-                'IQR(x)'), summ.names= c("N", "Median", "IQR")) %>% kable_styling(font_size = 10)
 ```
+
+```{r}
+#| cache-refresh: true
+#| label: tbl-chemistry-periods
+#| tbl-cap: Water chemistry values measured and modelled for the stations used in this study. Data from all stations is weighted to be proportional to the number of samples in each station, such that each station has the same weight.
+
+library(dplyr)
+library(ggplot2)
+library(matrixStats)
+
+# Add period column
+data_periods <- data_1 %>% 
+  mutate(
+    period = case_when(
+      sampling_date < as.Date("1998-01-01") ~ "1990-1997",
+      sampling_date >= as.Date("1997-01-01") & sampling_date <= as.Date("2012-01-01") ~ "1998-2012",
+      sampling_date > as.Date("2012-01-01") ~ "2012-2024",
+      TRUE ~ NA_character_  # Handle any NA values if necessary
+    )
+  )
+
+# Calculate the weights for each station within each period
+weights <- data_periods %>%
+  group_by(period, mvm_id) %>%
+  summarise(weight = 1 / n()) %>%
+  ungroup()
+
+# Merge weights with the original data
+data_with_weights <- data_periods %>%
+  left_join(weights, by = c("period", "mvm_id"))
+
+sumtable(data_with_weights %>% mutate(
+  `SO4 (mmol/l)` = SO4_mol *1000,
+  `Alk Acid (mmol/l)` = Alk_Acid_mol *1000,
+  `Organic charge (meq/l)` = org_charge*1000, 
+  `Sum of Cations (mmol/l)` = Sum.of.cations*1000
+  )%>% select(-c(
+    SO4_mol, charge_diff, Alk_Acid_mol, org_charge, Sum.of.cations, sample_id, mvm_id
+    )) %>% rename(
+      `TOC (mg/l)` = TOC_mg_l,
+      `Org. Charge Density (meq/g of C)` = org_charge_density_meq_g_C,
+      `EC (mS/M)` = EC_mS_m,
+      `Absorbance 420mm` = Abs_F420_5cm, 
+      `ADOM/DOC` = adom_doc,
+      `Ionic strength` = Ionic.strength, 
+      `Field pH` = pH_
+    ), out = "kable", group = "period", group.weights = "weight", summ=c('notNA(x)',
+                'reldist::wtd.quantile (x, q=0.50, na.rm = TRUE, weight = wts)',
+                'reldist::wtd.quantile (x, q=0.75, na.rm = TRUE, weight = wts) - reldist::wtd.quantile (x, q=0.25, na.rm = TRUE, weight = wts)'), summ.names = c("N", "Median", "IQR")
+             ) # %>% kable_styling(font_size = 10)
+```
+
+
+```{r}
+#| label: fig-bar-water-chem
+#| fig-cap: Bargraphs of water chemistry parameters modelled and observed for the three periods.
+#| fig-height: 10
+#| fig-width: 8
+
+library(dplyr)
+library(ggplot2)
+library(matrixStats)
+library(tidyr)
+
+
+data_with_weights %>% mutate(
+  `SO4 (mmol/l)` = SO4_mol *1000,
+  `Alk Acid (mmol/l)` = Alk_Acid_mol *1000,
+  `Organic charge (meq/l)` = org_charge*1000, 
+  `Sum of Cations (meq/l)` = Sum.of.cations*1000
+  )%>% select(-c(
+    SO4_mol, Alk_Acid_mol, org_charge, Sum.of.cations, sample_id
+    )) %>% rename(
+      `TOC (mg/l)` = TOC_mg_l,
+      `Org. Charge Density (meq/g of C)` = org_charge_density_meq_g_C,
+      `EC (mS/m)` = EC_mS_m,
+      `Absorbance 420mm` = Abs_F420_5cm, 
+      `ADOM/DOC` = adom_doc,
+      `Ionic strength` = Ionic.strength, 
+      `Field pH` = pH_,
+      `Charge Difference (%)` = charge_diff
+    ) -> data_with_weights_1
+
+variables = c('TOC (mg/l)', 'sVISa', 'Alk Acid (mmol/l)', 'Organic charge (meq/l)', 'Org. Charge Density (meq/g of C)', 'SO4 (mmol/l)', 'EC (mS/m)', 'Absorbance 420mm', 'Field pH',"Sum of Cations (meq/l)", "Al total (µmol/l)", "Si (mmol/l)", "Cl (mmol/l)" , "F (µmol/l)", "Charge Difference (%)")
+
+
+# Ensure all relevant columns are numeric
+data_with_weights_1 <- data_with_weights_1 %>%
+  mutate(across(all_of(variables), as.numeric))
+
+# Reshape the data into a long format
+long_data <- data_with_weights_1 %>%
+  pivot_longer(cols = variables,
+               names_to = "variable", values_to = "value") %>% 
+                 mutate(variable = fct_relevel(variable, 
+                                "TOC (mg/l)", 
+                                "sVISa",
+                                "Absorbance 420mm", 
+                                "Organic charge (meq/l)", 
+                                "Org. Charge Density (meq/g of C)",
+                                "Charge Difference (%)" ,
+                                "Alk Acid (mmol/l)",
+                                "SO4 (mmol/l)", 
+                                "EC (mS/m)",  
+                                "Field pH", 
+                                "Sum of Cations (meq/l)", 
+                                "Si (mmol/l)", 
+                                "Cl (mmol/l)", 
+                                "Al total (µmol/l)", 
+                                "F (µmol/l)"))
+    
+
+# Calculate weighted summary statistics for each variable and period
+weighted_summary <- long_data %>%
+  group_by(period, variable) %>%
+  summarise(
+    N = sum(!is.na(value)),
+    Median = weightedMedian(value, w = weight, na.rm = TRUE),
+    Q25 = weightedQuantile(value, w = weight, probs = 0.75, na.rm = TRUE),
+    Q75 = weightedQuantile(value, w = weight, probs = 0.25, na.rm = TRUE)
+  )
+
+facet_labels <- c(
+  `TOC (mg/l)` = "a) TOC (mg/l)",
+  `sVISa` = "b) sVISa",
+  `Absorbance 420mm` = "c) Absorbance 420mm",
+  `Organic charge (meq/l)` = "d) Organic charge (meq/l)",
+  `Org. Charge Density (meq/g of C)` = "e) Org. Charge Density (meq/g of C)",
+  `Charge Difference (%)` = "f) Charge Difference (%)",
+  `Alk Acid (mmol/l)` = "g) Alk Acid (mmol/l)",
+  `SO4 (mmol/l)` = "h) SO4 (mmol/l)",
+  `EC (mS/m)` = "i) EC (mS/m)",
+  `Field pH` = "j) Field pH",
+  `Sum of Cations (meq/l)` = "k) Sum of Cations (meq/l)",
+  `Si (mmol/l)` = "l) Si (mmol/l)",
+  `Cl (mmol/l)` = "m) Cl (mmol/l)",
+  `Al total (µmol/l)` = "n) Al total (µmol/l)",
+  `F (µmol/l)` = "o) F (µmol/l)"
+)
+
+# Create the plot with facets for each variable
+ggplot(weighted_summary, aes(x = period, y = Median, fill = period)) +
+  geom_bar(stat = "identity") +
+  geom_errorbar(aes(ymin = Q25, ymax = Q75), width = 0.2) +
+  labs(y = "Median Value", x = "Period") +
+  theme_minimal() +
+  theme(legend.position = "none",
+   strip.text = element_text(hjust = 0)) +
+  facet_wrap(~ variable, scales = "free_y", ncol = 3, labeller = labeller(variable = facet_labels) ) +
+  scale_fill_brewer(palette = "Set2") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+```{r}
+#| fig.cap: "Histogram of the number of samples per station for each period. Stations with more than two samples were used in significance testing, the number of these stations are in the title as (number of station/total number of stations)."
+#| label: fig-stations-periods
+#| out.width: 100%
+
+summary_stats <- data_periods %>% arrange(sampling_date) %>%
+  group_by(mvm_id, period) %>%
+  summarise(
+    median= median(TOC_mg_l, na.rm = TRUE),
+    iqr = IQR(TOC_mg_l, na.rm = TRUE),  # Interquartile Range
+    n = n()  # Count of observations per group
+  ) %>%
+  ungroup()
+
+summary_stats_complete <- summary_stats %>%
+  complete(mvm_id, period, fill = list(n = 0 ))
+
+
+library(dplyr)
+library(ggplot2)
+
+# Calculate the number of stations with n > 2 for each period
+stations_gt_2_per_period <- summary_stats_complete %>%
+  filter(n > 2) %>%
+  group_by(period) %>%
+  summarise(num_stations = n_distinct(mvm_id))
+
+# Create custom facet labels
+facet_labels <- stations_gt_2_per_period %>%
+  mutate(label = paste0(period, " \n(", num_stations, "/136)")) %>%
+  select(period, label) %>%
+  deframe()
+
+# Create the plot with custom facet labels
+summary_stats_complete %>%
+  filter(n > 2) %>%
+  ggplot(aes(x = n, fill = period)) +
+  geom_histogram(position = "dodge", binwidth = 20) +
+  facet_wrap(~ period, ncol = 3, labeller = labeller(period = facet_labels)) +
+  xlab("Number of samples per station") +
+  ylab("Number of stations") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2")+
+  labs(fill = "Period")
+```
+
 ## Significant Testing
 
-::: panel-tabset
+---
 
 ### sVISa
 
 ```{r}
-#| fig.cap: Kruskal Wallis with confidence interval of 95% to find number of stations with significant differences bettwen the periods. 
+
+#| fig.cap: "Kruskal Wallis with confidence interval of 95% to find number of stations with significant differences bettwen the periods. "
 #| label: fig-sig-sVISa
 #| out.width: 60%
 
@@ -1415,6 +1550,7 @@ summary_stats <- data_periods %>% arrange(sampling_date) %>%
     n = n()  # Count of observations per group
   ) %>%
   ungroup()
+
 
 # Step 3: Reshape the data to have periods as columns
 summary_table <- summary_stats %>%
@@ -1445,18 +1581,20 @@ final_table <- left_join(summary_table, testable_data, by = "mvm_id")
 
 # Create a summary table that counts the number of mvm_ids with significant and non-significant differences:
 summary_significance <- final_table %>%
-  mutate(significant = ifelse(kruskal_p_value < 0.05, "Significant", "Not Significant")) %>%
-  count(significant)
+  mutate(significant = case_when (kruskal_p_value < 0.05 ~ "Significant", kruskal_p_value >= 0.05 ~"Not Significant", 
+  TRUE ~ "No Data")) %>% as_tibble() %>%
+  dplyr::count(significant)
 
 
 # You can create a bar plot to visualize the proportion of mvm_id with significant vs. non-significant differences:
 
 ggplot(summary_significance, aes(x = significant, y = n, fill = significant)) +
   geom_bar(stat = "identity") +
-  labs(title = "Significance of Differences Across Periods for Each Station",
+  geom_text(aes(label = n), vjust = -0.5) +
+  labs(title = "",
        x = "Significance", y = "Number of Stations") +
-  scale_fill_manual(values = c("Significant" = "steelblue", "Not Significant" = "grey")) +
-  theme_minimal()
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2")
 ```
 ```{r}
 #| cache-refresh: true
@@ -1494,7 +1632,7 @@ pairwise_results <- data_periods %>%
 
 summary_dunns <- pairwise_results %>% group_by(dunn_test.Comparison) %>%
   mutate(significant = ifelse(dunn_test.P.adj < 0.05, "Significant", "Not Significant")) %>%
-  count(significant) %>% ungroup() %>%
+  dplyr::count(significant) %>% ungroup() %>%
   pivot_wider(
     names_from = significant,  # Create columns based on the 'significant' values
     values_from = n,           # Populate these columns with values from 'n'
@@ -1505,17 +1643,21 @@ kable(summary_dunns)
 ```
 
 ```{r}
-#| fig.cap: sVISa changes between periods. Only stations for which Kruskall-Wallis test found a significant difference between periods are included.
+#| fig.cap: sVISa changes between periods. Only stations for which Kruskall-Wallis test found a significant difference between periods are included. In the tile is indicated how many station out of all the stations that had significant results between the periods had data for a comparison during the specified periods.
 #| label: fig-bar-sVISa
+#| fig-width: 8
+#| fig-height: 8
 
 library(forcats)
-pairwise_results %>% left_join(stations %>% select(mvm_id, stationCoordinateY)) %>% mutate(significance = case_when(
+pairwise_results %>% mutate(significance = case_when(
     dunn_test.P.adj >= 0.05~ "not_sig", 
     dunn_test.P.adj < 0.05 & dunn_test.Z < 0 ~ "sig_increase",
     dunn_test.P.adj < 0.05 & dunn_test.Z > 0 ~ "sig_decrease")) %>%
-  complete(mvm_id, dunn_test.Comparison, fill = list(significance = "no data"))  %>% 
+  complete(mvm_id, dunn_test.Comparison, fill = list(significance = "no data")) %>% left_join(stations %>% select(mvm_id, stationCoordinateY)) %>% 
   mutate(mvm_id = fct_reorder(as.factor(mvm_id), stationCoordinateY)) %>% 
-  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997 - 1998-2012", "1998-2012 - 2012-2024", "1990-1997 - 2012-2024")) -> pairwise_results
+  mutate(dunn_test.Comparison = str_replace(dunn_test.Comparison, " - ", "\n")) %>% 
+  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997\n1998-2012", "1998-2012\n2012-2024", "1990-1997\n2012-2024")) -> pairwise_results
+
 
 ggplot(pairwise_results, aes(x = as.factor(mvm_id), fill = significance)) +
   geom_bar(position = "fill") +
@@ -1529,9 +1671,41 @@ ggplot(pairwise_results, aes(x = as.factor(mvm_id), fill = significance)) +
     theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), axis.text = element_text(size = 4.5))
 ```
 
+```{r}
+#| tab-cap: Information on how many stations had data for each period for sVISa.
+#| label: table-significance-sVISa
+library(dplyr)
+
+# Calculate the total number of stations for each period
+total_stations_per_period <- pairwise_results %>%
+  group_by(dunn_test.Comparison) %>%
+  summarise(total_stations = n_distinct(mvm_id))
+
+# Calculate the number of stations for each significance category within each period
+stations_with_data <- pairwise_results %>%
+  group_by(dunn_test.Comparison, significance) %>%
+  summarise(num_stations = n_distinct(mvm_id)) %>%
+  ungroup()
+
+# Combine the summaries into a single data frame
+summary_stations <- stations_with_data %>%
+  left_join(total_stations_per_period, by = "dunn_test.Comparison") %>%
+  pivot_wider(names_from = significance, values_from = num_stations, values_fill = list(num_stations = 0)) %>%
+  rename(
+    `Total Stations` = total_stations,
+    `Significant Increase` = sig_increase,
+    `Significant Decrease` = sig_decrease,
+    `Not Significant` = not_sig,
+    `No data` = `no data`
+  )
+
+# Print the summary data frame
+kable(summary_stations)
+
+```
 
 ```{r}
-#| fig.cap: sVISa of all stations
+#| fig.cap: sVISa of all stations not weighted.
 #| fig.subcap:
 #|      - "Median"
 #|      - "IQR"
@@ -1564,7 +1738,7 @@ ggplot(summary_stats, aes(x = period, y = iqr, fill = period)) +
 ### TOC
 
 ```{r}
-#| fig.cap: Kruskal Wallis with confidence interval of 95% to find number of stations with significant differences bettwen the periods. 
+#| fig.cap: "Kruskal Wallis with confidence interval of 95% to find number of stations with significant differences bettwen the periods." 
 #| label: fig-sig-TOC
 #| out.width: 60%
 
@@ -1608,16 +1782,18 @@ final_table <- left_join(summary_table, testable_data, by = "mvm_id")
 
 # Create a summary table that counts the number of mvm_ids with significant and non-significant differences:
 summary_significance <- final_table %>%
-  mutate(significant = ifelse(kruskal_p_value < 0.05, "Significant", "Not Significant")) %>%
-  count(significant)
+  mutate(significant = case_when (kruskal_p_value < 0.05 ~ "Significant", kruskal_p_value >= 0.05 ~"Not Significant", 
+  TRUE ~ "No Data")) %>% as_tibble() %>%
+  dplyr::count(significant)
 
 
 # You can create a bar plot to visualize the proportion of mvm_id with significant vs. non-significant differences:
 
 ggplot(summary_significance, aes(x = significant, y = n, fill = significant)) +
   geom_bar(stat = "identity") +
-  labs(x = "Significance", y = "Number of Stations") +
-  scale_fill_manual(values = c("Significant" = "steelblue", "Not Significant" = "grey")) +
+  geom_text(aes(label = n), vjust = -0.5) +
+  labs(title = "Significance of Differences Across Periods for Each Station",
+       x = "Significance", y = "Number of Stations") +
   theme_minimal()
 ```
 ```{r}
@@ -1656,7 +1832,7 @@ pairwise_results <- data_periods %>%
 
 summary_dunns <- pairwise_results %>% group_by(dunn_test.Comparison) %>%
   mutate(significant = ifelse(dunn_test.P.adj < 0.05, "Significant", "Not Significant")) %>%
-  count(significant) %>% ungroup() %>%
+  dplyr::count(significant) %>% ungroup() %>%
   pivot_wider(
     names_from = significant,  # Create columns based on the 'significant' values
     values_from = n,           # Populate these columns with values from 'n'
@@ -1667,8 +1843,10 @@ kable(summary_dunns)
 ```
 
 ```{r}
-#| fig.cap: TOC changes between periods. Only stations for which Kruskall-Wallis test found a significant difference between periods are included.
+#| fig.cap: TOC changes between periods. Only stations for which Kruskall-Wallis test found a significant difference between periods are included. In the tile is indicated how many station out of all the stations that had significant results between the periods had data for a comparison during the specified periods.
 #| label: fig-bar-TOC
+#| fig-width: 8
+#| fig-height: 8
 
 library(forcats)
 pairwise_results %>% mutate(significance = case_when(
@@ -1677,7 +1855,9 @@ pairwise_results %>% mutate(significance = case_when(
     dunn_test.P.adj < 0.05 & dunn_test.Z > 0 ~ "sig_decrease")) %>%
   complete(mvm_id, dunn_test.Comparison, fill = list(significance = "no data")) %>% left_join(stations %>% select(mvm_id, stationCoordinateY)) %>% 
   mutate(mvm_id = fct_reorder(as.factor(mvm_id), stationCoordinateY)) %>% 
-  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997 - 1998-2012", "1998-2012 - 2012-2024", "1990-1997 - 2012-2024")) -> pairwise_results
+  mutate(dunn_test.Comparison = str_replace(dunn_test.Comparison, " - ", "\n")) %>% 
+  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997\n1998-2012", "1998-2012\n2012-2024", "1990-1997\n2012-2024")) -> pairwise_results
+
 
 ggplot(pairwise_results, aes(x = as.factor(mvm_id), fill = significance)) +
   geom_bar(position = "fill") +
@@ -1687,8 +1867,41 @@ ggplot(pairwise_results, aes(x = as.factor(mvm_id), fill = significance)) +
   scale_fill_manual(values = c("sig_increase" = "#D55E00", "sig_decrease" = "#56B4E9", "not_sig" = "#F0E442", "no data" = 'white')) +
   coord_flip() +
   ylab("Dunn's test")+
-  xlab("Stations") + 
-  theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), axis.text = element_text(size = 4.5))
+  xlab("Stations")+
+    theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), axis.text = element_text(size = 4.5))
+```
+
+```{r}
+#| tab-cap: Information on how many stations had data for each period for TOC.
+#| label: table-significance-TOC
+library(dplyr)
+
+# Calculate the total number of stations for each period
+total_stations_per_period <- pairwise_results %>%
+  group_by(dunn_test.Comparison) %>%
+  summarise(total_stations = n_distinct(mvm_id))
+
+# Calculate the number of stations for each significance category within each period
+stations_with_data <- pairwise_results %>%
+  group_by(dunn_test.Comparison, significance) %>%
+  summarise(num_stations = n_distinct(mvm_id)) %>%
+  ungroup()
+
+# Combine the summaries into a single data frame
+summary_stations <- stations_with_data %>%
+  left_join(total_stations_per_period, by = "dunn_test.Comparison") %>%
+  pivot_wider(names_from = significance, values_from = num_stations, values_fill = list(num_stations = 0)) %>%
+  rename(
+    `Total Stations` = total_stations,
+    `Significant Increase` = sig_increase,
+    `Significant Decrease` = sig_decrease,
+    `Not Significant` = not_sig,
+    `No data` = `no data`
+  )
+
+# Print the summary data frame
+kable(summary_stations)
+
 ```
 
 ```{r}
@@ -1769,17 +1982,18 @@ final_table <- left_join(summary_table, testable_data, by = "mvm_id")
 
 # Create a summary table that counts the number of mvm_ids with significant and non-significant differences:
 summary_significance <- final_table %>%
-  mutate(significant = ifelse(kruskal_p_value < 0.05, "Significant", "Not Significant")) %>%
-  count(significant)
+  mutate(significant = case_when (kruskal_p_value < 0.05 ~ "Significant", kruskal_p_value >= 0.05 ~"Not Significant", 
+  TRUE ~ "No Data")) %>% as_tibble() %>%
+  dplyr::count(significant)
 
 
 # You can create a bar plot to visualize the proportion of mvm_id with significant vs. non-significant differences:
 
 ggplot(summary_significance, aes(x = significant, y = n, fill = significant)) +
   geom_bar(stat = "identity") +
+  geom_text(aes(label = n), vjust = -0.5) +
   labs(title = "Significance of Differences Across Periods for Each Station",
        x = "Significance", y = "Number of Stations") +
-  scale_fill_manual(values = c("Significant" = "steelblue", "Not Significant" = "grey")) +
   theme_minimal()
 ```
 ```{r}
@@ -1818,7 +2032,7 @@ pairwise_results <- data_periods %>%
 
 summary_dunns <- pairwise_results %>% group_by(dunn_test.Comparison) %>%
   mutate(significant = ifelse(dunn_test.P.adj < 0.05, "Significant", "Not Significant")) %>%
-  count(significant) %>% ungroup() %>%
+  dplyr::count(significant) %>% ungroup() %>%
   pivot_wider(
     names_from = significant,  # Create columns based on the 'significant' values
     values_from = n,           # Populate these columns with values from 'n'
@@ -1829,8 +2043,10 @@ kable(summary_dunns)
 ```
 
 ```{r}
-#| fig.cap: Organic charge density changes between periods. Only stations for which Kruskall-Wallis test found a significant difference between periods are included.
-#| label: fig-bar-org_density
+#| fig.cap: Organic charge density changes between periods. Only stations for which Kruskall-Wallis test found a significant difference between periods are included. In the tile is indicated how many station out of all the stations that had significant results between the periods had data for a comparison during the specified periods. 
+#| label: fig-bar-org_density¨
+#| fig-width: 8
+#| fig-height: 8
 
 library(forcats)
 pairwise_results %>% mutate(significance = case_when(
@@ -1839,7 +2055,9 @@ pairwise_results %>% mutate(significance = case_when(
     dunn_test.P.adj < 0.05 & dunn_test.Z > 0 ~ "sig_decrease")) %>%
   complete(mvm_id, dunn_test.Comparison, fill = list(significance = "no data")) %>% left_join(stations %>% select(mvm_id, stationCoordinateY)) %>% 
   mutate(mvm_id = fct_reorder(as.factor(mvm_id), stationCoordinateY)) %>% 
-  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997 - 1998-2012", "1998-2012 - 2012-2024", "1990-1997 - 2012-2024")) -> pairwise_results
+  mutate(dunn_test.Comparison = str_replace(dunn_test.Comparison, " - ", "\n")) %>% 
+  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997\n1998-2012", "1998-2012\n2012-2024", "1990-1997\n2012-2024")) -> pairwise_results
+
 
 ggplot(pairwise_results, aes(x = as.factor(mvm_id), fill = significance)) +
   geom_bar(position = "fill") +
@@ -1849,7 +2067,41 @@ ggplot(pairwise_results, aes(x = as.factor(mvm_id), fill = significance)) +
   scale_fill_manual(values = c("sig_increase" = "#D55E00", "sig_decrease" = "#56B4E9", "not_sig" = "#F0E442", "no data" = 'white')) +
   coord_flip() +
   ylab("Dunn's test")+
-  xlab("Stations") + theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), axis.text = element_text(size = 4.5))
+  xlab("Stations")+
+    theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), axis.text = element_text(size = 4.5))
+```
+
+```{r}
+#| tab-cap: Information on how many stations had data for each period for organic charge density.
+#| label: table-significance-org
+library(dplyr)
+
+# Calculate the total number of stations for each period
+total_stations_per_period <- pairwise_results %>%
+  group_by(dunn_test.Comparison) %>%
+  summarise(total_stations = n_distinct(mvm_id))
+
+# Calculate the number of stations for each significance category within each period
+stations_with_data <- pairwise_results %>%
+  group_by(dunn_test.Comparison, significance) %>%
+  summarise(num_stations = n_distinct(mvm_id)) %>%
+  ungroup()
+
+# Combine the summaries into a single data frame
+summary_stations <- stations_with_data %>%
+  left_join(total_stations_per_period, by = "dunn_test.Comparison") %>%
+  pivot_wider(names_from = significance, values_from = num_stations, values_fill = list(num_stations = 0)) %>%
+  rename(
+    `Total Stations` = total_stations,
+    `Significant Increase` = sig_increase,
+    `Significant Decrease` = sig_decrease,
+    `Not Significant` = not_sig,
+    `No data` = `no data`
+  )
+
+# Print the summary data frame
+kable(summary_stations)
+
 ```
 
 ```{r}
@@ -1883,13 +2135,13 @@ ggplot(summary_stats, aes(x = period, y = iqr, fill = period)) +
   theme(legend.position = "none")
 ```
 
-:::
-
-
 ---
 
 
+
 # Spatial Patterns
+
+## Overview
 
 ```{r}
 #| cache-refresh: false
@@ -1903,117 +2155,19 @@ all <- data_1 %>%
 all %>% write.csv("../results/r_py/pls_input.csv")
 ```
 
-::: panel-tabset
-
-```{python prep for maps}
-#| eval: false
-import pandas as pd
-import geopandas as gpd
-from shapely.geometry import Point
-import plotly.express as px
-import plotly.io as pio
-
-# import plotly.io as pio
-# pio.renderers.default = "plotly_mimetype+notebook_connected"
-
-# Path to the CSV file
-file_path = "../results/r_py/pls_input.csv"
-
-# Load the CSV file into a DataFrame
-df = pd.read_csv(file_path)
-
-# Step 2: Convert to GeoDataFrame with SWEREF 99TM CRS
-geometry = [Point(xy) for xy in zip(df["stationCoordinateX"], df["stationCoordinateY"])]
-stations_gdf = gpd.GeoDataFrame(df, geometry=geometry, crs="EPSG:3006")  # SWEREF 99TM CRS
-
-# Step 3: Load Sweden shapefile and ensure it's in SWEREF 99TM
-sweden_shapefile = "../input/shapefiles/Sweden.zip"
-sweden_gdf = gpd.read_file(f"zip://{sweden_shapefile}")
-sweden_gdf = sweden_gdf.to_crs("EPSG:3006")  # Ensure CRS matches SWEREF 99TM
-
-sweden_gdf = sweden_gdf.to_crs("EPSG:4326")
-stations_gdf = stations_gdf.to_crs("EPSG:4326")
-
-# Extract coordinates from the GeoDataFrame for Plotly
-stations_gdf["lon"] = stations_gdf.geometry.x
-stations_gdf["lat"] = stations_gdf.geometry.y
-stations_gdf["area_km2"] = stations_gdf["area_ARO_m2"] / (1000000)
-#stations_gdf["org_charge_meq_mg_C"] = stations_gdf["org_charge_eq_mg_C"] * 1000
-# Convert Sweden boundary GeoDataFrame to GeoJSON for base map overlay
-sweden_geojson = sweden_gdf.__geo_interface__
-
-lakes_shapefile = "../input/shapefiles/Swedish_Lakes.zip"
-lakes_gdf = gpd.read_file(f"zip://{lakes_shapefile}")
-
-lakes_gdf = lakes_gdf.to_crs("EPSG:4326")
-lakes_geojson = lakes_gdf.__geo_interface__
-```
-## TOC
-
-```{python}
-#| jupyter_compat: true
-#| eval: false
- 
-stations_gdf["median_toc_mg_l"] = stations_gdf["median_toc"] * (12010)
-
-def map_toc():
-# Create an interactive map
-  fig = px.scatter_map(
-      stations_gdf,
-      lat="lat",
-      lon="lon",
-      color="median_toc_mg_l",  # Column to determine color
-      color_continuous_scale="Viridis",  # Color scale (can be adjusted)
-      zoom=3.5,  # Adjust zoom level as needed
-      map_style="white-bg",
-      title="TOC concentration",
-      custom_data= ['mvm_id', "median_toc_mg_l", "area_km2", "stationName"]
-  )
-
-  fig.update_traces(hovertemplate="MMV ID:  %{customdata[0]} <br> Station name: %{customdata[3]} <br>TOC (mg C/l): %{customdata[1]:.6f} <br>Area: %{customdata[2]:.0f}")
-
-  fig.update_traces(marker=dict(size=10))
-
-  # Overlay Sweden boundary
-  fig.update_layout(
-      map={
-          "layers": [
-              {
-                  "source": sweden_geojson,
-                  "type": "line",
-                  "color": "black",
-                  "line": {"width": 1},
-              },
-              {
-                  "source": lakes_geojson,
-                  "type": "line",
-                  "color": "grey",
-                  "line": {"width": 1},
-              }
-          ]
-      },
-  # Set height of the plot
-      title={"x": 0.5},
-      width=500,  # Set width of the plot
-      height=600,  # Set height of the plot  # Center the title
-      margin={"r": 0, "t": 40, "l": 0, "b": 0},  # Adjust margins
-  )  
-
-  return fig
-   
-map_toc().write_html("../results/reports/maps/map_toc.html", full_html= False,include_plotlyjs = True )
-```
+---
 
 ```{r}
-#| fig-cap: Mean TOC concentration for each station of all data at a single station 
-#| fig-alt: Map of TOC mean.
-#| label: fig-map-toc
-#| fig-height: 8
-#| cache-refresh: false
-htmltools::includeHTML("../results/reports/maps/map_toc.html")
+#| echo: false
+#| fig-cap: Water chemistry modelled and observed for 136 stations with available data that were sucessfully modelled in this study. The size of the marker is related to the size of the color while the color shows the observed median TOC (left), the observed sVISa (middle), and the modelled organic charge density (right) of the catchment of the station.
+#| fig-alt: Map of results
+#| label: fig-map-results
+#| out-width: 100%
+#| cache-refresh: true
+knitr::include_graphics("../results/reports/maps/map_results.png")
 ```
 
-## sVISa
+**sVISa**
 
 sVISa is the specific visual absorbance calculated as: 
 
@@ -2023,166 +2177,7 @@ $$
 
 It is similar to SUVA, which uses Absorbance at 254mm instead of 420mm. It is used as an indicator of the character of DOC. 
 
-```{python}
-#| jupyter_compat: true
-#| eval: false
-
-def map_sVISa(): 
-    fig = px.scatter_map(
-        stations_gdf,
-        lat="lat",
-        lon="lon",
-        color="median_sVISa",  # Column to determine color
-        color_continuous_scale="Viridis",  # Color scale (can be adjusted)
-        zoom=3.5,  # Adjust zoom level as needed
-        map_style="white-bg",
-        title="sVISa",
-        custom_data= ['mvm_id', "median_sVISa", "area_km2", "stationName"]
-    )
-
-    fig.update_traces(hovertemplate="MMV ID:  %{customdata[0]} <br>Station name: %{customdata[3]}  <br>sVISa: %{customdata[1]:.6f} <br>Area: %{customdata[2]:.0f}")
-
-    fig.update_traces(marker=dict(size=10))
-
-    # Overlay Sweden boundary
-    fig.update_layout(
-        map={
-          "layers": [
-              {
-                  "source": sweden_geojson,
-                  "type": "line",
-                  "color": "black",
-                  "line": {"width": 1},
-              },
-              {
-                  "source": lakes_geojson,
-                  "type": "line",
-                  "color": "grey",
-                  "line": {"width": 1},
-              }
-          ]
-        },
-        width=500,  # Set width of the plot
-        height=600,  # Set height of the plot
-        title={"x": 0.5},  # Center the title
-        margin={"r": 0, "t": 40, "l": 0, "b": 0},  # Adjust margins
-    ) 
-    return(fig)
-
-map_sVISa().write_html("../results/reports/maps/map_sVISa.html", full_html= False,include_plotlyjs = True)
-```
-
-```{r}
-#| fig-cap: Median sVISa for each station of all data at a single station 
-#| fig-alt: Map of median sVISa.
-#| label: fig-map-sVISa
-#| fig-height: 8
-#| cache-refresh: false
-htmltools::includeHTML( "../results/reports/maps/map_sVISa.html")
-```
-
-## Organic charge density
-
-```{python}
-#| jupyter_compat: true
-#| eval: true
-import pandas as pd
-import geopandas as gpd
-from shapely.geometry import Point
-import plotly.express as px
-import plotly.io as pio
-
-# import plotly.io as pio
-# pio.renderers.default = "plotly_mimetype+notebook_connected"
-
-# Path to the CSV file
-file_path = "../results/r_py/pls_input.csv"
-
-# Load the CSV file into a DataFrame
-df = pd.read_csv(file_path)
-
-# Step 2: Convert to GeoDataFrame with SWEREF 99TM CRS
-geometry = [Point(xy) for xy in zip(df["stationCoordinateX"], df["stationCoordinateY"])]
-stations_gdf = gpd.GeoDataFrame(df, geometry=geometry, crs="EPSG:3006")  # SWEREF 99TM CRS
-
-# Step 3: Load Sweden shapefile and ensure it's in SWEREF 99TM
-sweden_shapefile = "../input/shapefiles/Sweden.zip"
-sweden_gdf = gpd.read_file(f"zip://{sweden_shapefile}")
-sweden_gdf = sweden_gdf.to_crs("EPSG:3006")  # Ensure CRS matches SWEREF 99TM
-
-sweden_gdf = sweden_gdf.to_crs("EPSG:4326")
-stations_gdf = stations_gdf.to_crs("EPSG:4326")
-
-# Extract coordinates from the GeoDataFrame for Plotly
-stations_gdf["lon"] = stations_gdf.geometry.x
-stations_gdf["lat"] = stations_gdf.geometry.y
-stations_gdf["area_km2"] = stations_gdf["area_ARO_m2"] / (1000000)
-#stations_gdf["org_charge_meq_mg_C"] = stations_gdf["org_charge_eq_mg_C"] * 1000
-# Convert Sweden boundary GeoDataFrame to GeoJSON for base map overlay
-sweden_geojson = sweden_gdf.__geo_interface__
-
-lakes_shapefile = "../input/shapefiles/Swedish_Lakes.zip"
-lakes_gdf = gpd.read_file(f"zip://{lakes_shapefile}")
-
-lakes_gdf = lakes_gdf.to_crs("EPSG:4326")
-lakes_geojson = lakes_gdf.__geo_interface__
-
-def map_cd():
-# Create an interactive map
-  fig = px.scatter_map(
-      stations_gdf,
-      lat="lat",
-      lon="lon",
-      color="org_charge_meq_g_C",  # Column to determine color
-      color_continuous_scale="Viridis",  # Color scale (can be adjusted)
-      zoom=3.5,  # Adjust zoom level as needed
-      map_style="white-bg",
-      title="Organic charge density",
-      custom_data=['mvm_id', "org_charge_meq_g_C", "area_km2", "stationName"]
-  )
-
-  fig.update_traces(hovertemplate="MMV ID:  %{customdata[0]} <br>Station name: %{customdata[3]} <br>Organi charge density (eq/g C): %{customdata[1]:.6f} <br>Area: %{customdata[2]:.0f}")
-
-  fig.update_traces(marker=dict(size=10))
-
-  # Overlay Sweden boundary
-  fig.update_layout(
-      map={
-          "layers": [
-              {
-                  "source": sweden_geojson,
-                  "type": "line",
-                  "color": "black",
-                  "line": {"width": 1},
-              },
-              {
-                  "source": lakes_geojson,
-                  "type": "line",
-                  "color": "grey",
-                  "line": {"width": 1},
-              }
-          ]
-      },
-      width=500,  # Set width of the plot
-      height=600,  # Set height of the plot
-      title={"x": 0.5},  # Center the title
-      margin={"r": 0, "t": 40, "l": 0, "b": 0},  # Adjust margins
-  ) 
-  return (fig)
-map_cd().write_html("../results/reports/maps/map_cd.html", full_html= False,include_plotlyjs = True)
-```
-
-```{r}
-#| fig-cap: Median organic charge density for each station of all data at a single station 
-#| fig-alt: Map of median organisc charge density.
-#| label: fig-map-charge-density
-#| fig-height: 8
-#| cache-refresh: false
-htmltools::includeHTML( "../results/reports/maps/map_cd.html")
-```
-
-
-:::
+---
 
 
 
@@ -2193,7 +2188,7 @@ I chose to use a OPLS instead of a PLS for relating the results to catchment cha
 In the OPLS the explantory variables used are catchment characteristics listed in @tbl-catch_char. 
 
 
-::: {.panel-tabset}
+---
 
 
 ### Organic charge
@@ -2209,6 +2204,61 @@ opls.model <- opls(all %>% select(-c(org_charge_meq_g_C,median_sVISa, mvm_id, st
 ```
 
 ```{r}
+plot_loading_ggplot <- function(opls_model, response_label = "TOC", vip.threshold = 1.0, text_size = 12, title = "Hella Sverige") {
+  library(ggplot2)
+  library(dplyr)
+
+  # Extract VIP scores and loadings
+  vip_data <- enframe(getVipVn(opls_model), name = "Variable", value = "VIP.score")
+
+  # Extract predictive and orthogonal loadings
+  loadings_ortho <- getLoadingMN(opls_model, orthoL = TRUE)
+  loadings_pred <- getLoadingMN(opls_model, orthoL = FALSE)
+
+  # Convert the loadings to a data frame
+  loading_df <- data.frame(
+    Variable = rownames(loadings_pred), 
+    Predictive_Loading = loadings_pred[, 1],    # Extract the first column for predictive loading
+    Orthogonal_Loading = loadings_ortho[, 1]    # Extract the first column for orthogonal loading
+  ) %>% 
+    left_join(vip_data, by = "Variable") %>%    # Join with VIP data on variable name
+    mutate(color = ifelse(VIP.score < vip.threshold, "black", "blue"))
+
+  # Filter for high VIP score variables (VIP > 1)
+  loading_VIP <- loading_df %>% filter(VIP.score > 1)
+
+  # Extract the response variable position
+  x_1 <- opls_model@cMN[1, 1]  # Assuming the first coefficient as x
+  y_1 <- 0.0                    # y set to 0 for the response variable
+  resp <- data.frame(x = x_1, y = 0, name = response_label)
+  # Create the ggplot
+  plot <- ggplot(loading_df, aes(x = Predictive_Loading, y = Orthogonal_Loading)) +
+    geom_hline(yintercept = 0, linetype = "solid", color = "black", size = 1) + # Bold horizontal line
+  geom_vline(xintercept = 0, linetype = "solid", color = "black", size = 1) + # Bold vertical line
+    geom_point(aes(size = VIP.score, color = color), alpha = 0.7) +
+    scale_color_identity() +
+    scale_size_continuous(range = c(0.1, 1), name = "VIP Score") +
+    ggrepel::geom_text_repel(
+  data = loading_VIP,
+  aes(label = Variable),
+  size = text_size / 3,
+  max.overlaps = Inf,        # Ensure all labels are shown
+  box.padding = 0.5,         # Padding around the labels
+  point.padding = 0.5       # Padding around points
+) +
+    geom_point( data = resp, aes(x = x, y = y), color = "red", size = 5) +
+    annotate(data = resp,"text", x = x_1, y = y_1, label = response_label, color = "red", vjust = +2, size = text_size / 3) +
+    scale_size_continuous(range = c(1, 10), name = "VIP Score") +
+    labs(x = "Predictive Loading", y = "Orthogonal Loading", title = "") +
+    theme_minimal() +
+    theme(
+      legend.position = "none")+scale_size_continuous(range = c(0.5, 3.5), name = "VIP Score")
+
+  return(plot)
+}
+```
+
+```{r}
 #| fig-cap: >
 #|   OPLS loading plot for Organic charge density. Blue variables indicate a VIP score > 1 
 #|   while black indicate a VIP < 1. The red is the response variable: organic charge density. 
@@ -2220,7 +2270,8 @@ opls.model <- opls(all %>% select(-c(org_charge_meq_g_C,median_sVISa, mvm_id, st
 
 library(tibble)
 source("../src/sourcecode.R")
-plot_loading(opls.model, response_label = "Org. charge density", vip.threshold = 1.0, text_size = 12)
+plot_loading_ggplot(opls_model = opls.model, response_label = "Org. charge density", vip.threshold = 1.0, text_size = 12)
+
 ```
 
 **PLS**
@@ -2248,7 +2299,7 @@ opls.model.sVISa <- opls(all %>% filter(median_sVISa > 0) %>% select(-c(org_char
 #|    the response variable.  
 #| fig-alt: OPLS loading plot for sVISa.
 #| label: fig-loading-sVISa
-plot_loading(opls.model.sVISa, response_label = "sVISa", vip.threshold = 1.0, text_size = 12)
+plot_loading_ggplot(opls.model.sVISa, response_label = "sVISa", vip.threshold = 1.0, text_size = 12)
 ```
 
 
@@ -2266,7 +2317,7 @@ opls.model.TOC <- opls(all %>% select(-c(org_charge_meq_g_C,median_sVISa, mvm_id
 
 ```{r}
 #| cache-refresh: false
-plot_loading(opls.model.TOC, response_label = "TOC", vip.threshold = 1.0, text_size = 12)
+plot_loading_ggplot(opls.model.TOC, response_label = "TOC", vip.threshold = 1.0, text_size = 12)
 ```
 
 **PLS**
@@ -2333,15 +2384,16 @@ final_df <- rbind(new_rows, sorted_df)
 
 options(knitr.kable.NA = "")
 final_df %>%
-  kable(.,booktabs = TRUE,   col.names = c("Variable", "VIP", "Variable", "VIP", "Variable", "VIP")) %>%
-  kable_styling(latex_options = c("striped", "hold_position", "scale_down"), font_size = 7) %>% # Clean output table
-  add_header_above(c("Organic Charge Density" = 2, "TOC" = 2, "sVISa" = 2)) 
+  kable(.,booktabs = TRUE,   col.names = c("Variable", "VIP", "Variable", "VIP", "Variable", "VIP"))  # %>%
+  # kable_styling(latex_options = c("striped", "hold_position", "scale_down"), font_size = 7) %>% # Clean output table
+  # add_header_above(c("Organic Charge Density" = 2, "TOC" = 2, "sVISa" = 2)) 
 
 ```
 
 
-:::
+---
 
+<!-- 
 ## Spatial-temporal 
 
 Visualizing how the explantory power changes for the three periods: 1990-1997, 1998-2012, 2013-2024.  
@@ -2358,7 +2410,7 @@ filter(year < 2008)%>%
 
 ```
 
-::: panel-tabset
+---
 
 ### Organic Charge Density
 
@@ -2372,4 +2424,4 @@ p1.cd <- opls(all %>% select(-c(org_charge_eq_mg_C,median_sVISa, mvm_id, station
 
 ### Charge Density
 
-:::
+--- -->
