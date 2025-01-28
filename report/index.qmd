@@ -559,12 +559,12 @@ Visual Minteq uses ADOM/DOC to model the charge on the organic matter for each s
 
 ## ADOM/DOC
 ```{r}
-#| fig-cap: Histogram of ADOM/DOC for samples before and after filtering for 173 stations (number of samples > 5).  
+#| fig-cap: Histogram of ADOM/DOC for modelled samples for 173 stations (number of samples > 5).  
 #| fig-alt: Histogram of ADOM/DOC.
 #| label: fig-hist_adom_doc_after
 #| fig-subcap:
-#|    - Before filtering of charge difference < 0.5%
-#|    - After filtering of charge difference < 0.5%
+#|    - All moddeled samples.
+#|    - Samples accepted as sufficiently well modelled with a charge difference < 0.5%.
 #| layout-ncol: 2
 
 ggplot(data, aes(x = adom_doc)) +
@@ -969,12 +969,13 @@ sumtable(catch_char %>% select(-mvm_id), out ="kable", digits = 3) # %>% kable_s
 In this section we test for normality of the data, compare the variation within stations and between stations and look at correlations betweeen the different water chemistry variables. For this we use the data of the 136 stations for which we sucessfully modelled organic charge. 
 
 ```{r}
-#| cache-refresh: false
+#| cache-refresh: true
 data %>% filter(abs(charge_diff) < 0.5) %>% mutate(sVISa = Abs_F420_5cm/(TOC_mol*12.01*1000)) -> data
-data %>% mutate(year = year(sampling_date), TOC_mg_l = TOC_mol*12.01*1000, org_charge_density_meq_g_C = org_charge_eq_mg_C * 1000*1000,`Al3+ (µmol/l)` = Al.3 *1000000, `Si (mmol/l)` = Si_mol* 1000, `Cl (mmol/l)` = Cl_mol*1000, `Al total (µmol/l)` = Al_mol * 1000000, `F (µmol/l)` = Fluorid_mol *1000000) %>% select(year,EC_mS_m, sVISa,org_charge_density_meq_g_C,TOC_mg_l,SO4_mol,Alk_Acid_mol, sampling_date, Abs_F420_5cm, mvm_id, adom_doc, charge_diff, org_charge, Sum.of.cations, pH_, Ionic.strength, sample_id, `Al3+ (µmol/l)`, `Si (mmol/l)`, `Cl (mmol/l)`,`Al total (µmol/l)`,`F (µmol/l)`) -> data_1
+data %>% mutate(year = year(sampling_date), TOC_mg_l = TOC_mol*12.01*1000, org_charge_density_meq_g_C = org_charge_eq_mg_C * 1000*1000,`Al3+ (µmol/l)` = Al.3 *1000000, `Si (mmol/l)` = Si_mol* 1000, `Cl (mmol/l)` = Cl_mol*1000, `Al total (µmol/l)` = Al_mol * 1000000, `F (µmol/l)` = Fluorid_mol *1000000, `NO3 (mol/l)` = NO3_N_mol) %>% select(year,EC_mS_m, sVISa,org_charge_density_meq_g_C,TOC_mg_l,SO4_mol,Alk_Acid_mol, sampling_date, Abs_F420_5cm, mvm_id, adom_doc, charge_diff, org_charge, Sum.of.cations, Sum.of.anions, pH_, Ionic.strength, sample_id, `Al3+ (µmol/l)`, `Si (mmol/l)`, `Cl (mmol/l)`,`Al total (µmol/l)`,`F (µmol/l)`, `NO3 (mol/l)`) -> data_1
 ```
 
 ```{r}
+#| cache-refresh: true
 #| label: calc-weigths
 library(dplyr)
 library(ggplot2)
@@ -1005,8 +1006,8 @@ sumtable(data_1_with_weights %>% mutate(
   `Alk Acid (mmol/l)` = Alk_Acid_mol *1000,
   `Organic charge (meq/l)` = org_charge*1000, 
   `Sum of Cations (mmol/l)` = Sum.of.cations*1000
-  )%>% select(-c(
-    SO4_mol, charge_diff, Alk_Acid_mol, org_charge, Sum.of.cations, sample_id, mvm_id, weight
+  )  %>% select(-c(
+    SO4_mol, charge_diff, Alk_Acid_mol, org_charge, Sum.of.cations, Sum.of.anions, sample_id, mvm_id, weight
     )) %>% rename(
       `TOC (mg/l)` = TOC_mg_l,
       `Org. Charge Density (meq/g of C)` = org_charge_density_meq_g_C,
@@ -1340,17 +1341,6 @@ library(dplyr)
 library(ggplot2)
 library(matrixStats)
 
-# Add period column
-data_periods <- data_1 %>% 
-  mutate(
-    period = case_when(
-      sampling_date < as.Date("1998-01-01") ~ "1990-1997",
-      sampling_date >= as.Date("1997-01-01") & sampling_date <= as.Date("2012-01-01") ~ "1998-2012",
-      sampling_date > as.Date("2012-01-01") ~ "2012-2024",
-      TRUE ~ NA_character_  # Handle any NA values if necessary
-    )
-  )
-
 # Calculate the weights for each station within each period
 weights <- data_periods %>%
   group_by(period, mvm_id) %>%
@@ -1394,6 +1384,18 @@ library(ggplot2)
 library(matrixStats)
 library(tidyr)
 
+# Calculate the weights for each station within each period
+weights <- data_periods %>%
+  group_by(period, mvm_id) %>%
+  summarise(weight = 1 / n()) %>%
+  ungroup()
+
+data_periods %>%
+ mutate(weak_acids = (Sum.of.anions -(-org_charge + SO4_mol + `Cl (mmol/l)`/1000 + `NO3 (mol/l)` )) / Sum.of.anions) -> data_periods
+
+# Merge weights with the original data
+data_with_weights <- data_periods %>%
+  left_join(weights, by = c("period", "mvm_id"))
 
 data_with_weights %>% mutate(
   `SO4 (mmol/l)` = SO4_mol *1000,
@@ -1401,7 +1403,7 @@ data_with_weights %>% mutate(
   `Organic charge (meq/l)` = org_charge*1000, 
   `Sum of Cations (meq/l)` = Sum.of.cations*1000
   )%>% select(-c(
-    SO4_mol, Alk_Acid_mol, org_charge, Sum.of.cations, sample_id
+    SO4_mol, Alk_Acid_mol, org_charge, Sum.of.cations, sample_id, charge_diff
     )) %>% rename(
       `TOC (mg/l)` = TOC_mg_l,
       `Org. Charge Density (meq/g of C)` = org_charge_density_meq_g_C,
@@ -1410,10 +1412,10 @@ data_with_weights %>% mutate(
       `ADOM/DOC` = adom_doc,
       `Ionic strength` = Ionic.strength, 
       `Field pH` = pH_,
-      `Charge Difference (%)` = charge_diff
+      `non-organic weak acids` = weak_acids 
     ) -> data_with_weights_1
 
-variables = c('TOC (mg/l)', 'sVISa', 'Alk Acid (mmol/l)', 'Organic charge (meq/l)', 'Org. Charge Density (meq/g of C)', 'SO4 (mmol/l)', 'EC (mS/m)', 'Absorbance 420mm', 'Field pH',"Sum of Cations (meq/l)", "Al total (µmol/l)", "Si (mmol/l)", "Cl (mmol/l)" , "F (µmol/l)", "Charge Difference (%)")
+variables = c('TOC (mg/l)', 'sVISa', 'Alk Acid (mmol/l)', 'Organic charge (meq/l)', 'Org. Charge Density (meq/g of C)', 'SO4 (mmol/l)', 'EC (mS/m)', 'Absorbance 420mm', 'Field pH',"Sum of Cations (meq/l)", "Al total (µmol/l)", "Si (mmol/l)", "Cl (mmol/l)" , "F (µmol/l)", "non-organic weak acids")
 
 
 # Ensure all relevant columns are numeric
@@ -1430,7 +1432,7 @@ long_data <- data_with_weights_1 %>%
                                 "Absorbance 420mm", 
                                 "Organic charge (meq/l)", 
                                 "Org. Charge Density (meq/g of C)",
-                                "Charge Difference (%)" ,
+                                "non-organic weak acids" ,
                                 "Alk Acid (mmol/l)",
                                 "SO4 (mmol/l)", 
                                 "EC (mS/m)",  
@@ -1458,7 +1460,7 @@ facet_labels <- c(
   `Absorbance 420mm` = "c) Absorbance 420mm",
   `Organic charge (meq/l)` = "d) Organic charge (meq/l)",
   `Org. Charge Density (meq/g of C)` = "e) Org. Charge Density (meq/g of C)",
-  `Charge Difference (%)` = "f) Charge Difference (%)",
+  `non-organic weak acids` = "f) NO weak acids (contribution)",
   `Alk Acid (mmol/l)` = "g) Alk Acid (mmol/l)",
   `SO4 (mmol/l)` = "h) SO4 (mmol/l)",
   `EC (mS/m)` = "i) EC (mS/m)",
@@ -2043,8 +2045,8 @@ kable(summary_dunns)
 ```
 
 ```{r}
-#| fig.cap: Organic charge density changes between periods. Only stations for which Kruskall-Wallis test found a significant difference between periods are included. In the tile is indicated how many station out of all the stations that had significant results between the periods had data for a comparison during the specified periods. 
-#| label: fig-bar-org_density¨
+#| fig-cap: Organic charge density changes between periods. Only stations for which Kruskall-Wallis test found a significant difference between periods are included. In the tile is indicated how many station out of all the stations that had significant results between the periods had data for a comparison during the specified periods. 
+#| label: fig-bar-org_density
 #| fig-width: 8
 #| fig-height: 8
 
@@ -2135,6 +2137,235 @@ ggplot(summary_stats, aes(x = period, y = iqr, fill = period)) +
   theme(legend.position = "none")
 ```
 
+
+### Weak Acid Contribution
+
+Acids in a water chemistry sample can be split into weak acids and strong acids. The weak acids can be further divided into organic acids and other weak acids. Here we look at how the contribution of these non-organic other weak acids has changed over time. 
+
+The weak acid contribution is calculated as: 
+
+$$
+{\substack{\text{charge contribution of} \\ \text{ non-organic weak anions}}} =  \frac{\text{Sum of anions} - (\text{Organic anions} + \text{Sum of strong anions})}{\text{Sum of anions}}
+$$
+
+
+
+{\substack{\text{aaa} \\ \text{bbb}}}
+
+|**Anion Component**| Constituents | source |
+|------ | -----| ------|
+|**strong acids**|SO4, Cl, NO3| measured||
+|**not organic weak Acids**| Al, Fl, etc....| modelled|
+|**organic acids**| DOC | modelled|
+ : The components of the sum of anions for each water chemistry sample, its constituents and whether it is modelled or measured. {#tbl-anions}
+
+
+```{r}
+data_periods %>%
+ mutate(weak_acids = (Sum.of.anions -(-org_charge + SO4_mol + `Cl (mmol/l)`/1000 + `NO3 (mol/l)` )) / Sum.of.anions, sampling_date = as.Date(sampling_date)) -> data_periods 
+```
+
+```{r}
+
+#| fig.cap: "Kruskal Wallis with confidence interval of 95% to find number of stations with significant differences bettwen the periods. "
+#| label: fig-sig-weak_acids
+#| out.width: 60%
+
+summary_stats <- data_periods  %>%
+  arrange(sampling_date) %>%
+  group_by(mvm_id, period) %>%
+  summarise(
+    median= median(weak_acids, na.rm = TRUE),
+    iqr = IQR(weak_acids, na.rm = TRUE),  # Interquartile Range
+    n = n()  # Count of observations per group
+  ) %>%
+  ungroup()
+
+
+# Step 3: Reshape the data to have periods as columns
+summary_table <- summary_stats %>%
+  pivot_wider(
+    names_from = period,
+    values_from = c(median, iqr, n)
+  )
+
+# Step 4: Filter data for Kruskal-Wallis testing
+# Ensure each group (mvm_id) has more than one period and non-identical weak_acids values across periods
+testable_data <- data_periods %>%
+  arrange(sampling_date) %>%
+  group_by(mvm_id) %>%
+  filter(n_distinct(period) > 1) %>%  # At least two periods
+  filter(n_distinct(weak_acids[!is.na(weak_acids)]) > 2) %>%  # At least two unique weak_acids values
+  summarise(kruskal_p_value = tryCatch({
+    kruskal.test(weak_acids ~ period)$p.value  # Run Kruskal-Wallis only if conditions met
+  }, error = function(e) {
+    message("Error in Kruskal-Wallis test for mvm_id ", unique(mvm_id), ": ", e$message)
+    NA
+  }))
+  # Return NA if test fails
+
+# Step 5: Merge the significance results with the summary table
+final_table <- left_join(summary_table, testable_data, by = "mvm_id")
+
+# View the final table with significance results
+# kable(final_table)
+
+# Create a summary table that counts the number of mvm_ids with significant and non-significant differences:
+summary_significance <- final_table %>%
+  mutate(significant = case_when (kruskal_p_value < 0.05 ~ "Significant", kruskal_p_value >= 0.05 ~"Not Significant", 
+  TRUE ~ "No Data")) %>% as_tibble() %>%
+  dplyr::count(significant)
+
+
+# You can create a bar plot to visualize the proportion of mvm_id with significant vs. non-significant differences:
+
+ggplot(summary_significance, aes(x = significant, y = n, fill = significant)) +
+  geom_bar(stat = "identity") +
+  geom_text(aes(label = n), vjust = -0.5) +
+  labs(title = "",
+       x = "Significance", y = "Number of Stations") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2")
+```
+```{r}
+#| cache-refresh: true
+#| label: tbl-weak_acids-significance
+#| tbl-cap: Contribution of weak acids significance using Kruskal Wallis to determine significance and then Dunn's test as a post hoc test to find the significant differences.
+
+library(FSA)
+
+# Perform pairwise Dunn's test for each mvm_id
+# Ensure period is a factor
+
+data_periods <- data_periods %>% 
+  mutate(period = as.factor(period))
+
+mvm_ids_sig <- final_table %>% filter((kruskal_p_value < 0.05)) %>% select(mvm_id)
+# Perform Dunn's test for each mvm_id
+pairwise_results <- data_periods %>%
+  arrange(sampling_date) %>%
+  filter(mvm_id %in% mvm_ids_sig$mvm_id) %>%
+  group_by(mvm_id) %>%
+  filter(n_distinct(period) > 1) %>%
+  group_modify(~ {
+    tryCatch(
+      data.frame(
+        dunn_test = list(as.data.frame(dunnTest(weak_acids ~ period, data = .x, method = "bonferroni")$res))
+      ),
+      error = function(e) data.frame(dunn_test_summary = list(NULL))  # Handle errors
+    )
+  }) %>%
+  ungroup()
+
+
+# View the result
+# pairwise_results %>% filter(dunn_test.P.adj < 0.05)
+
+summary_dunns <- pairwise_results %>% group_by(dunn_test.Comparison) %>%
+  mutate(significant = ifelse(dunn_test.P.adj < 0.05, "Significant", "Not Significant")) %>%
+  dplyr::count(significant) %>% ungroup() %>%
+  pivot_wider(
+    names_from = significant,  # Create columns based on the 'significant' values
+    values_from = n,           # Populate these columns with values from 'n'
+    values_fill = 0            # Fill missing values with 0
+  )
+
+kable(summary_dunns)
+```
+
+```{r}
+#| fig.cap: Contribution of non-organic weak acids to charge changes between periods. Only stations for which Kruskall-Wallis test found a significant difference between periods are included. In the tile is indicated how many station out of all the stations that had significant results between the periods had data for a comparison during the specified periods.
+#| label: fig-bar-weak_acids
+#| fig-width: 8
+#| fig-height: 8
+
+library(forcats)
+pairwise_results %>% mutate(significance = case_when(
+    dunn_test.P.adj >= 0.05~ "not_sig", 
+    dunn_test.P.adj < 0.05 & dunn_test.Z < 0 ~ "sig_increase",
+    dunn_test.P.adj < 0.05 & dunn_test.Z > 0 ~ "sig_decrease")) %>%
+  complete(mvm_id, dunn_test.Comparison, fill = list(significance = "no data")) %>% left_join(stations %>% select(mvm_id, stationCoordinateY)) %>% 
+  mutate(mvm_id = fct_reorder(as.factor(mvm_id), stationCoordinateY)) %>% 
+  mutate(dunn_test.Comparison = str_replace(dunn_test.Comparison, " - ", "\n")) %>% 
+  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997\n1998-2012", "1998-2012\n2012-2024", "1990-1997\n2012-2024")) -> pairwise_results
+
+
+ggplot(pairwise_results, aes(x = as.factor(mvm_id), fill = significance)) +
+  geom_bar(position = "fill") +
+  facet_wrap(~ dunn_test.Comparison) +
+  labs(x = "Station (mvm_id)", y = "Proportion", fill = "Significance") +
+  theme_minimal() +
+  scale_fill_manual(values = c("sig_increase" = "#D55E00", "sig_decrease" = "#56B4E9", "not_sig" = "#F0E442", "no data" = 'white')) +
+  coord_flip() +
+  ylab("Dunn's test")+
+  xlab("Stations")+
+    theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), axis.text = element_text(size = 4.5))
+```
+
+```{r}
+#| tab-cap: Information on how many stations had data for each period for the contribution of weak acids to charge.
+#| label: table-significance-weak_acids
+library(dplyr)
+
+# Calculate the total number of stations for each period
+total_stations_per_period <- pairwise_results %>%
+  group_by(dunn_test.Comparison) %>%
+  summarise(total_stations = n_distinct(mvm_id))
+
+# Calculate the number of stations for each significance category within each period
+stations_with_data <- pairwise_results %>%
+  group_by(dunn_test.Comparison, significance) %>%
+  summarise(num_stations = n_distinct(mvm_id)) %>%
+  ungroup()
+
+# Combine the summaries into a single data frame
+summary_stations <- stations_with_data %>%
+  left_join(total_stations_per_period, by = "dunn_test.Comparison") %>%
+  pivot_wider(names_from = significance, values_from = num_stations, values_fill = list(num_stations = 0)) %>%
+  rename(
+    `Total Stations` = total_stations,
+    `Significant Increase` = sig_increase,
+    `Significant Decrease` = sig_decrease,
+    `Not Significant` = not_sig,
+    `No data` = `no data`
+  )
+
+# Print the summary data frame
+kable(summary_stations)
+
+```
+
+```{r}
+#| fig.cap: Contribution of weak acids to charge of all stations not weighted.
+#| fig.subcap:
+#|      - "Median"
+#|      - "IQR"
+#| layout-ncol: 2
+#| label: fig-box-weak_acids
+#| 
+ggplot(summary_stats, aes(x = period, y = median, fill = period)) +
+  geom_boxplot() +
+  # geom_text(aes(
+  #   x = period,
+  #   y = max(median, na.rm = TRUE) + 0.002,  # Adjust text position
+  #   label = paste0("sig n: ", sig_n, "\ninsig n: ", insig_n)
+  # ), color = "black", size = 4, position = position_dodge(width = 0.9)) +
+  labs(x = "Period", y = "Median contribution weak_acids") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+ggplot(summary_stats, aes(x = period, y = iqr, fill = period)) +
+  geom_boxplot() +
+  # geom_text(aes(
+  #   x = period,
+  #   y = max(median, na.rm = TRUE) + 0.002,  # Adjust text position
+  #   label = paste0("sig n: ", sig_n, "\ninsig n: ", insig_n)
+  # ), color = "black", size = 4, position = position_dodge(width = 0.9)) +
+  labs(x = "Period", y = "IQR weak_acids") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
 ---
 
 
@@ -2204,7 +2435,7 @@ opls.model <- opls(all %>% select(-c(org_charge_meq_g_C,median_sVISa, mvm_id, st
 ```
 
 ```{r}
-plot_loading_ggplot <- function(opls_model, response_label = "TOC", vip.threshold = 1.0, text_size = 12, title = "Hella Sverige") {
+plot_loading_ggplot <- function(opls_model, response_label = "TOC", vip.threshold = 1.0, text_size = 10, title = "Hella Sverige") {
   library(ggplot2)
   library(dplyr)
 
@@ -2270,16 +2501,8 @@ plot_loading_ggplot <- function(opls_model, response_label = "TOC", vip.threshol
 
 library(tibble)
 source("../src/sourcecode.R")
-plot_loading_ggplot(opls_model = opls.model, response_label = "Org. charge density", vip.threshold = 1.0, text_size = 12)
+plot_loading_ggplot(opls_model = opls.model, response_label = "Org. charge density", vip.threshold = 1.0, text_size = 10)
 
-```
-
-**PLS**
-
-Here a PLS was run instead of an OPLS for comparison
-```{r}
-#| cache-refresh: false
-pls.model <- opls(all %>% select(-c(org_charge_meq_g_C, median_sVISa, mvm_id, stationName)), all$org_charge_meq_g_C)
 ```
 
 ### sVISa
@@ -2299,7 +2522,7 @@ opls.model.sVISa <- opls(all %>% filter(median_sVISa > 0) %>% select(-c(org_char
 #|    the response variable.  
 #| fig-alt: OPLS loading plot for sVISa.
 #| label: fig-loading-sVISa
-plot_loading_ggplot(opls.model.sVISa, response_label = "sVISa", vip.threshold = 1.0, text_size = 12)
+plot_loading_ggplot(opls.model.sVISa, response_label = "sVISa", vip.threshold = 1.0, text_size = 10)
 ```
 
 
@@ -2317,21 +2540,16 @@ opls.model.TOC <- opls(all %>% select(-c(org_charge_meq_g_C,median_sVISa, mvm_id
 
 ```{r}
 #| cache-refresh: false
-plot_loading_ggplot(opls.model.TOC, response_label = "TOC", vip.threshold = 1.0, text_size = 12)
+plot_loading_ggplot(opls.model.TOC, response_label = "TOC", vip.threshold = 1.0, text_size = 10)
 ```
 
-**PLS**
-
-
-```{r}
-#| cache-refresh: false
-pls.model <- opls(all %>% select(-c(org_charge_meq_g_C,median_toc,median_sVISa, mvm_id, stationName)), all$median_toc)
-```
 
 ### Comparison
 
 ```{r VIP table}
 #| cache-refresh: false
+#| tbl-cap: Table of OPLS results, showing the variation explained by the model (R2) the model efficiency based on seven fold validatino (Q2) and the explanatory variables with a VIP score > 0.9. The first row is for median organic charge density, the second row for median TOC concentrations, and the third column for sVISa.
+#| label: table-PLS-comp
 VIP_all <- enframe(getVipVn(opls.model), name = "Variable", value = "org.charge") %>%  left_join(enframe(getVipVn(opls.model.TOC), name = "Variable", value = "TOC")) %>% left_join(enframe(getVipVn(opls.model.sVISa), name = "Variable", value = "sVISa")) 
 
 loading_oc <- getLoadingMN(opls.model)[,1]         # Values of the vector become the 'Value' column
@@ -2384,44 +2602,10 @@ final_df <- rbind(new_rows, sorted_df)
 
 options(knitr.kable.NA = "")
 final_df %>%
-  kable(.,booktabs = TRUE,   col.names = c("Variable", "VIP", "Variable", "VIP", "Variable", "VIP"))  # %>%
+  kable(.,booktabs = TRUE,   col.names = c("Variable", "VIP", "Variable", "VIP", "Variable", "VIP")) #  %>%
   # kable_styling(latex_options = c("striped", "hold_position", "scale_down"), font_size = 7) %>% # Clean output table
   # add_header_above(c("Organic Charge Density" = 2, "TOC" = 2, "sVISa" = 2)) 
 
 ```
 
-
 ---
-
-<!-- 
-## Spatial-temporal 
-
-Visualizing how the explantory power changes for the three periods: 1990-1997, 1998-2012, 2013-2024.  
-
-```{r split data}
-#| cache-refresh: false
-all <- data %>% filter(abs(charge_diff) < 0.5) %>% mutate(sVISa = Abs_F420_5cm/(TOC_mol*12.01))%>% 
-filter(year < 2008)%>% 
- group_by(mvm_id) %>% summarise(org_charge_eq_mg_C = median(org_charge_eq_mg_C), median_toc = median(TOC_mol), median_sVISa = median(sVISa, na.rm = TRUE)) %>%
- ungroup() %>% mutate(mvm_id = as_factor(mvm_id))%>% 
- select(mvm_id, org_charge_eq_mg_C, median_toc, median_sVISa) %>%
- left_join(catch_char, by = join_by(mvm_id))
-
-
-```
-
----
-
-### Organic Charge Density
-
-```{r}
-#| eval: false
-#| cache-refresh: false
-p1.cd <- opls(all %>% select(-c(org_charge_eq_mg_C,median_sVISa, mvm_id, stationName)), all$org_charge_eq_mg_C, orthoI = 1, predI = 1)
-```
-
-### TOC
-
-### Charge Density
-
---- -->
