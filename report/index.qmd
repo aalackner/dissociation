@@ -751,12 +751,11 @@ group_by(mvm_id) %>% summarise(
 
 
 ```{r}
-#| fig-cap: Change in discharge for the three periods 1990-1997, 1998-2011, 2012-2024.
-#| label: fig-discharge-periods 
-#| fig-subcap:
-#|    - mean annual discharge
+#| eval: false
+#| fig-cap: Change in discharge for the three periods 1990-1997, 1998-2011, 2012-2024. The median discharge (left), 25th percentage discharge (middle), 75th percentile discharge of each station is calculated and then plotted.
 #|    - 25% discharge
 #|    - 75% discharge
+#| label: fig-discharge-periods 
 #| fig-alt: Climate change in the three periods.
 #| layout-ncol: 2
 discharge %>% mutate(q_spec= (median_q_m3_s / area_ARO_m2)*1000*60*60*24, p25_spec = (p25_q_m3_s / area_ARO_m2)*1000*60*60*24, p75_spec = (p75_q_m3_s / area_ARO_m2)*1000*60*60*24 ) %>% filter((year >= 1990 & year < 1998) ) %>%
@@ -769,26 +768,24 @@ group_by(mvm_id) %>% summarise(
 
 discharge %>% mutate(q_spec= (median_q_m3_s / area_ARO_m2)*1000*60*60*24, p25_spec = (p25_q_m3_s / area_ARO_m2)*1000*60*60*24, p75_spec = (p75_q_m3_s / area_ARO_m2)*1000*60*60*24 ) %>% filter((year >= 2012 & year < 2024) ) %>%
 group_by(mvm_id) %>% summarise(
-    log_mean_Q_spec = mean(log(q_spec)), log_p25_Q_spec = mean(log(p25_spec)), log_p75_Q_spec = mean(log(p75_spec)), log_mean_Q = mean(log(median_q_m3_s))) %>% ungroup() %>% mutate(period = "2012-2024") -> discharge_p3
+    log_mean_Q_spec = mean(log(q_spec)), log_p25_Q_spec = mean(log(p25_spec)), log_p75_Q_spec = mean(log(p75_spec)), 4logmean_Q = mean(log(median_q_m3_s))) %>% ungroup() %>% mutate(period = "2012-2024") -> discharge_p3
 
 
 discharge_all <- bind_rows(discharge_p1, discharge_p2, discharge_p3)
 
 # Reshape the data to long format
 discharge_long <- discharge_all %>%
-  pivot_longer(cols = c(log_mean_Q_spec ,log_p25_Q_spec, log_mean_Q),
+  pivot_longer(cols = c(mean_Q_spec ,p25_Q_spec, mean_Q),
                names_to = "variable", values_to = "value")
 
 # Create boxplots with separate panels
 ggplot(discharge_long, aes(x = period, y = value, fill = period)) +
   geom_boxplot() +
   facet_wrap(~ variable, scales = "free_y") +
-  labs(title = "Boxplots of Climate Variables Across Periods",
-       x = "Period", y = "Value") +
+  labs(title = "",
+       x = "Period", y = "Q (m3/s)") +
   theme_minimal()
 
-
-library(ggpubr)
 
 
 # my_comparisons <- list( c("1990-1997", "1998-2011"), c("1998-2011", "2012-2024"), c("1990-1997", "2012-2024") )
@@ -1327,8 +1324,11 @@ data_periods <- data_1 %>%
       sampling_date >= as.Date("1997-01-01") & sampling_date <= as.Date("2012-01-01") ~ "1998-2012",
       sampling_date > as.Date("2012-01-01") ~ "2012-2024",
       TRUE ~ NA_character_  # Handle any NA values if necessary
-    )
-  )
+    ),
+   weak_acids = 100*((Sum.of.anions -(-org_charge + 2*SO4_mol + `Cl (mmol/l)`/1000 + `NO3 (mol/l)` )) / Sum.of.anions), sampling_date = as.Date(sampling_date),
+ strong_acids = 100*((2*SO4_mol + `Cl (mmol/l)`/1000 + `NO3 (mol/l)` )/Sum.of.anions),
+ organic_acids = (-org_charge / Sum.of.anions) *100 )
+
 
 ```
 
@@ -1357,7 +1357,7 @@ sumtable(data_with_weights %>% mutate(
   `Organic charge (meq/l)` = org_charge*1000, 
   `Sum of Cations (mmol/l)` = Sum.of.cations*1000
   )%>% select(-c(
-    SO4_mol, charge_diff, Alk_Acid_mol, org_charge, Sum.of.cations, sample_id, mvm_id
+    SO4_mol, charge_diff, Alk_Acid_mol, Sum.of.cations, sample_id, mvm_id
     )) %>% rename(
       `TOC (mg/l)` = TOC_mg_l,
       `Org. Charge Density (meq/g of C)` = org_charge_density_meq_g_C,
@@ -1365,7 +1365,10 @@ sumtable(data_with_weights %>% mutate(
       `Absorbance 420mm` = Abs_F420_5cm, 
       `ADOM/DOC` = adom_doc,
       `Ionic strength` = Ionic.strength, 
-      `Field pH` = pH_
+      `Field pH` = pH_ ,
+      `NO weak acid contibution (%)` = weak_acids,
+      `Strong acid contibution (%)` = strong_acids,
+      `Organic acid contribution (%)` = organic_acids
     ), out = "kable", group = "period", group.weights = "weight", summ=c('notNA(x)',
                 'reldist::wtd.quantile (x, q=0.50, na.rm = TRUE, weight = wts)',
                 'reldist::wtd.quantile (x, q=0.75, na.rm = TRUE, weight = wts) - reldist::wtd.quantile (x, q=0.25, na.rm = TRUE, weight = wts)'), summ.names = c("N", "Median", "IQR")
@@ -1376,7 +1379,7 @@ sumtable(data_with_weights %>% mutate(
 ```{r}
 #| label: fig-bar-water-chem
 #| fig-cap: Bargraphs of water chemistry parameters modelled and observed for the three periods.
-#| fig-height: 10
+#| fig-height: 12
 #| fig-width: 8
 
 library(dplyr)
@@ -1390,9 +1393,6 @@ weights <- data_periods %>%
   summarise(weight = 1 / n()) %>%
   ungroup()
 
-data_periods %>%
- mutate(weak_acids = (Sum.of.anions -(-org_charge + SO4_mol + `Cl (mmol/l)`/1000 + `NO3 (mol/l)` )) / Sum.of.anions) -> data_periods
-
 # Merge weights with the original data
 data_with_weights <- data_periods %>%
   left_join(weights, by = c("period", "mvm_id"))
@@ -1403,20 +1403,27 @@ data_with_weights %>% mutate(
   `Organic charge (meq/l)` = org_charge*1000, 
   `Sum of Cations (meq/l)` = Sum.of.cations*1000
   )%>% select(-c(
-    SO4_mol, Alk_Acid_mol, org_charge, Sum.of.cations, sample_id, charge_diff
+    SO4_mol, Alk_Acid_mol, org_charge, Sum.of.cations, sample_id
     )) %>% rename(
       `TOC (mg/l)` = TOC_mg_l,
       `Org. Charge Density (meq/g of C)` = org_charge_density_meq_g_C,
       `EC (mS/m)` = EC_mS_m,
+      `charge difference (%)` = charge_diff,
       `Absorbance 420mm` = Abs_F420_5cm, 
       `ADOM/DOC` = adom_doc,
       `Ionic strength` = Ionic.strength, 
       `Field pH` = pH_,
-      `non-organic weak acids` = weak_acids 
+      `NO weak acid contibution (%)` = weak_acids,
+      `Strong acid contibution (%)` = strong_acids,
+      `Organic acid contribution (%)` = organic_acids
     ) -> data_with_weights_1
 
-variables = c('TOC (mg/l)', 'sVISa', 'Alk Acid (mmol/l)', 'Organic charge (meq/l)', 'Org. Charge Density (meq/g of C)', 'SO4 (mmol/l)', 'EC (mS/m)', 'Absorbance 420mm', 'Field pH',"Sum of Cations (meq/l)", "Al total (µmol/l)", "Si (mmol/l)", "Cl (mmol/l)" , "F (µmol/l)", "non-organic weak acids")
+variables = c('TOC (mg/l)', 'sVISa', 'Alk Acid (mmol/l)', 'Organic charge (meq/l)', 'Org. Charge Density (meq/g of C)', "charge difference (%)", 'SO4 (mmol/l)', 'EC (mS/m)', 'Absorbance 420mm', 'Field pH',"Sum of Cations (meq/l)", "Al total (µmol/l)", "Si (mmol/l)", "Cl (mmol/l)" , "F (µmol/l)",                                "NO weak acid contibution (%)",
+                                 "Strong acid contibution (%)",
+                                  "Organic acid contribution (%)"  )
 
+
+variables_in = c('TOC (mg/l)', 'sVISa', 'Alk Acid (mmol/l)', 'Organic charge (meq/l)', 'Org. Charge Density (meq/g of C)', "charge difference (%)", 'SO4 (mmol/l)', 'EC (mS/m)', 'Absorbance 420mm', 'Field pH',"Sum of Cations (meq/l)", "Al total (µmol/l)", "Si (mmol/l)", "Cl (mmol/l)" , "F (µmol/l)" )
 
 # Ensure all relevant columns are numeric
 data_with_weights_1 <- data_with_weights_1 %>%
@@ -1432,7 +1439,7 @@ long_data <- data_with_weights_1 %>%
                                 "Absorbance 420mm", 
                                 "Organic charge (meq/l)", 
                                 "Org. Charge Density (meq/g of C)",
-                                "non-organic weak acids" ,
+                                "charge difference (%)",
                                 "Alk Acid (mmol/l)",
                                 "SO4 (mmol/l)", 
                                 "EC (mS/m)",  
@@ -1441,11 +1448,16 @@ long_data <- data_with_weights_1 %>%
                                 "Si (mmol/l)", 
                                 "Cl (mmol/l)", 
                                 "Al total (µmol/l)", 
-                                "F (µmol/l)"))
+                                "F (µmol/l)",
+                                "NO weak acid contibution (%)",
+                                 "Strong acid contibution (%)",
+                                  "Organic acid contribution (%)"
+                                ))
     
 
 # Calculate weighted summary statistics for each variable and period
 weighted_summary <- long_data %>%
+  filter(variable %in% variables_in) %>%
   group_by(period, variable) %>%
   summarise(
     N = sum(!is.na(value)),
@@ -1460,7 +1472,7 @@ facet_labels <- c(
   `Absorbance 420mm` = "c) Absorbance 420mm",
   `Organic charge (meq/l)` = "d) Organic charge (meq/l)",
   `Org. Charge Density (meq/g of C)` = "e) Org. Charge Density (meq/g of C)",
-  `non-organic weak acids` = "f) NO weak acids (contribution)",
+  `charge difference (%)` = "f) charge diff. (%)",
   `Alk Acid (mmol/l)` = "g) Alk Acid (mmol/l)",
   `SO4 (mmol/l)` = "h) SO4 (mmol/l)",
   `EC (mS/m)` = "i) EC (mS/m)",
@@ -1484,6 +1496,46 @@ ggplot(weighted_summary, aes(x = period, y = Median, fill = period)) +
   scale_fill_brewer(palette = "Set2") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
 ```
+
+```{r}
+#| label: fig-bar-acid-contribution
+#| fig-cap: Bargraphs of the contribution of non-organic weak acids (a), strong acids (b) and organic acids (c) for the three periods, for all stations weighted by the number of samples in each station. Calculated as the percentage of the total negative charge.
+#| fig-height: 4
+#| fig-width: 8
+
+# Filter the data for the last three variables
+last_three_variables <- c("NO weak acid contibution (%)", "Strong acid contibution (%)", "Organic acid contribution (%)")
+
+# Calculate weighted summary statistics for the last three variables
+weighted_summary_last_three <- long_data %>%
+  filter(variable %in% last_three_variables) %>%
+  group_by(period, variable) %>%
+  summarise(
+    N = sum(!is.na(value)),
+    Median = weightedMedian(value, w = weight, na.rm = TRUE),
+    Q25 = weightedQuantile(value, w = weight, probs = 0.75, na.rm = TRUE),
+    Q75 = weightedQuantile(value, w = weight, probs = 0.25, na.rm = TRUE)
+  )
+
+facet_labels_last_three <- c(
+  `NO weak acid contibution (%)`= "a) NO weak acid (%)",
+  `Strong acid contibution (%)`= "b) Strong acids (%)",
+  `Organic acid contribution (%)` = "c) Organic acids (%)"
+)
+
+# Create the plot with facets for the last three variables
+ggplot(weighted_summary_last_three, aes(x = period, y = Median, fill = period)) +
+  geom_bar(stat = "identity") +
+  geom_errorbar(aes(ymin = Q25, ymax = Q75), width = 0.2) +
+  labs(y = "Median Value", x = "Period") +
+  theme_minimal() +
+  theme(legend.position = "none",
+   strip.text = element_text(hjust = 0)) +
+  facet_wrap(~ variable, scales = "fixed", ncol = 3, labeller = labeller(variable = facet_labels_last_three) ) +
+  scale_fill_brewer(palette = "Set2") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
 
 
 ```{r}
@@ -2140,12 +2192,12 @@ ggplot(summary_stats, aes(x = period, y = iqr, fill = period)) +
 
 ### Weak Acid Contribution
 
-Acids in a water chemistry sample can be split into weak acids and strong acids. The weak acids can be further divided into organic acids and other weak acids. Here we look at how the contribution of these non-organic other weak acids has changed over time. 
+Acids in a water chemistry sample can be split into weak acids and strong acids. The weak acids can be further divided into organic acids and other weak acids. Here we look at how the contribution of these non-organic other weak acids has changed over time for each station. How it has changed for all stations combined can be seen in @fig-bar-acid-contribution.
 
 The weak acid contribution is calculated as: 
 
 $$
-{\substack{\text{charge contribution of} \\ \text{ non-organic weak anions}}} =  \frac{\text{Sum of anions} - (\text{Organic anions} + \text{Sum of strong anions})}{\text{Sum of anions}}
+{\substack{\text{charge contribution of} \\ \text{ non-organic weak anions}}} =  100 * \frac{\text{Sum of anions} - (\text{Organic anions} + \text{Sum of strong anions})}{\text{Sum of anions}}
 $$
 
 
@@ -2160,10 +2212,6 @@ $$
  : The components of the sum of anions for each water chemistry sample, its constituents and whether it is modelled or measured. {#tbl-anions}
 
 
-```{r}
-data_periods %>%
- mutate(weak_acids = (Sum.of.anions -(-org_charge + SO4_mol + `Cl (mmol/l)`/1000 + `NO3 (mol/l)` )) / Sum.of.anions, sampling_date = as.Date(sampling_date)) -> data_periods 
-```
 
 ```{r}
 
@@ -2334,6 +2382,49 @@ summary_stations <- stations_with_data %>%
 kable(summary_stations)
 
 ```
+
+```{r}
+#| fig.cap: Contribution of strong acids to charge of all stations not weighted.
+#| fig.subcap:
+#|      - "Median"
+#|      - "IQR"
+#| layout-ncol: 2
+#| label: fig-box-strong_acids
+
+summary_stats <- data_periods  %>%
+  arrange(sampling_date) %>%
+  group_by(mvm_id, period) %>%
+  summarise(
+    median= median(weak_acids, na.rm = TRUE),
+    iqr = IQR(weak_acids, na.rm = TRUE),  # Interquartile Range
+    n = n()  # Count of observations per group
+  ) %>%
+  ungroup()
+
+ggplot(summary_stats, aes(x = period, y = median, fill = period)) +
+  geom_boxplot() +
+  # geom_text(aes(
+  #   x = period,
+  #   y = max(median, na.rm = TRUE) + 0.002,  # Adjust text position
+  #   label = paste0("sig n: ", sig_n, "\ninsig n: ", insig_n)
+  # ), color = "black", size = 4, position = position_dodge(width = 0.9)) +
+  labs(x = "Period", y = "Median contribution weak_acids") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+ggplot(summary_stats, aes(x = period, y = iqr, fill = period)) +
+  geom_boxplot() +
+  # geom_text(aes(
+  #   x = period,
+  #   y = max(median, na.rm = TRUE) + 0.002,  # Adjust text position
+  #   label = paste0("sig n: ", sig_n, "\ninsig n: ", insig_n)
+  # ), color = "black", size = 4, position = position_dodge(width = 0.9)) +
+  labs(x = "Period", y = "IQR weak_acids") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+### Strong Acid contribution
 
 ```{r}
 #| fig.cap: Contribution of weak acids to charge of all stations not weighted.
