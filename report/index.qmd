@@ -1697,6 +1697,25 @@ kable(summary_dunns)
 ```
 
 ```{r}
+# Calculate the percentage changes for each comparison
+percentage_changes <- summary_table %>%
+  pivot_longer(cols = starts_with("median_"), names_to = "period", values_to = "median") %>%
+  mutate(period = str_remove(period, "median_")) %>%
+  pivot_wider(names_from = period, values_from = median) %>%
+  mutate(
+    `1990-1997 - 1998-2012` = (`1998-2012` - `1990-1997`) / `1990-1997` * 100,
+    `1990-1997 - 2012-2024` = (`2012-2024` - `1990-1997`) / `1990-1997` * 100,
+    `1998-2012 - 2012-2024` = (`2012-2024` - `1998-2012`) / `1998-2012` * 100
+  ) %>%
+  select(mvm_id, `1990-1997 - 1998-2012`, `1990-1997 - 2012-2024`, `1998-2012 - 2012-2024`) %>%
+  pivot_longer(cols = -mvm_id, names_to = "dunn_test.Comparison", values_to = "MedianChange")
+
+  # Merge the percentage changes with the pairwise results
+pairwise_results <- pairwise_results %>%
+  left_join(percentage_changes, by = c("mvm_id", "dunn_test.Comparison"))
+```
+
+```{r}
 #| fig.cap: sVISa changes between periods. Only stations for which Kruskall-Wallis test found a significant difference between periods are included. In the tile is indicated how many station out of all the stations that had significant results between the periods had data for a comparison during the specified periods.
 #| label: fig-bar-sVISa
 #| fig-width: 8
@@ -1704,25 +1723,28 @@ kable(summary_dunns)
 
 library(forcats)
 pairwise_results %>% mutate(significance = case_when(
-    dunn_test.P.adj >= 0.05~ "not_sig", 
-    dunn_test.P.adj < 0.05 & dunn_test.Z < 0 ~ "sig_increase",
-    dunn_test.P.adj < 0.05 & dunn_test.Z > 0 ~ "sig_decrease")) %>%
+    dunn_test.P.adj >= 0.05~ "not sig", 
+    dunn_test.P.adj < 0.05 & MedianChange > 0 & MedianChange < 5 ~ "sig increase < 5%",
+    dunn_test.P.adj < 0.05 & MedianChange > 5 ~ "sig increase > 5%",
+    dunn_test.P.adj < 0.05 & MedianChange < 0 & MedianChange > -5 ~ "sig decrease < 5%",
+    dunn_test.P.adj < 0.05 & MedianChange < -5 ~ "sig decrease > 5%")) %>%
   complete(mvm_id, dunn_test.Comparison, fill = list(significance = "no data")) %>% left_join(stations %>% select(mvm_id, stationCoordinateY)) %>% 
   mutate(mvm_id = fct_reorder(as.factor(mvm_id), stationCoordinateY)) %>% 
   mutate(dunn_test.Comparison = str_replace(dunn_test.Comparison, " - ", "\n")) %>% 
-  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997\n1998-2012", "1998-2012\n2012-2024", "1990-1997\n2012-2024")) -> pairwise_results
+  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997\n1998-2012", "1998-2012\n2012-2024", "1990-1997\n2012-2024")) -> pairwise_results_1
 
 
-ggplot(pairwise_results, aes(x = as.factor(mvm_id), fill = significance)) +
+ggplot(pairwise_results_1, aes(x = as.factor(mvm_id), fill = significance)) +
   geom_bar(position = "fill") +
   facet_wrap(~ dunn_test.Comparison) +
   labs(x = "Station (mvm_id)", y = "Proportion", fill = "Significance") +
   theme_minimal() +
-  scale_fill_manual(values = c("sig_increase" = "#D55E00", "sig_decrease" = "#56B4E9", "not_sig" = "#F0E442", "no data" = 'white')) +
+  scale_fill_manual(values = c("sig increase < 5%" = "#E69F00", "sig decrease < 5%" = "#56B4E9", "not sig" = "#F0E442", "no data" = 'white',"sig increase > 5%" = "#D55E00", "sig decrease > 5%" = "#0072B2" )) +
   coord_flip() +
   ylab("Dunn's test")+
   xlab("Stations")+
     theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), axis.text = element_text(size = 4.5))
+
 ```
 
 ```{r}
@@ -1731,12 +1753,12 @@ ggplot(pairwise_results, aes(x = as.factor(mvm_id), fill = significance)) +
 library(dplyr)
 
 # Calculate the total number of stations for each period
-total_stations_per_period <- pairwise_results %>%
+total_stations_per_period <- pairwise_results_1 %>%
   group_by(dunn_test.Comparison) %>%
   summarise(total_stations = n_distinct(mvm_id))
 
 # Calculate the number of stations for each significance category within each period
-stations_with_data <- pairwise_results %>%
+stations_with_data <- pairwise_results_1 %>%
   group_by(dunn_test.Comparison, significance) %>%
   summarise(num_stations = n_distinct(mvm_id)) %>%
   ungroup()
@@ -1744,14 +1766,15 @@ stations_with_data <- pairwise_results %>%
 # Combine the summaries into a single data frame
 summary_stations <- stations_with_data %>%
   left_join(total_stations_per_period, by = "dunn_test.Comparison") %>%
-  pivot_wider(names_from = significance, values_from = num_stations, values_fill = list(num_stations = 0)) %>%
-  rename(
-    `Total Stations` = total_stations,
-    `Significant Increase` = sig_increase,
-    `Significant Decrease` = sig_decrease,
-    `Not Significant` = not_sig,
-    `No data` = `no data`
-  )
+  pivot_wider(names_from = significance, values_from = num_stations, values_fill = list(num_stations = 0)) 
+  # %>%
+  # rename(
+  #   `Total Stations` = total_stations,
+  #   `Significant Increase` = sig_increase,
+  #   `Significant Decrease` = sig_decrease,
+  #   `Not Significant` = not_sig,
+  #   `No data` = `no data`
+  # )
 
 # Print the summary data frame
 kable(summary_stations)
@@ -1897,6 +1920,26 @@ kable(summary_dunns)
 ```
 
 ```{r}
+# Calculate the median changes for each comparison
+# Calculate the percentage changes for each comparison
+percentage_changes <- summary_table %>%
+  pivot_longer(cols = starts_with("median_"), names_to = "period", values_to = "median") %>%
+  mutate(period = str_remove(period, "median_")) %>%
+  pivot_wider(names_from = period, values_from = median) %>%
+  mutate(
+    `1990-1997 - 1998-2012` = (`1998-2012` - `1990-1997`) / `1990-1997` * 100,
+    `1990-1997 - 2012-2024` = (`2012-2024` - `1990-1997`) / `1990-1997` * 100,
+    `1998-2012 - 2012-2024` = (`2012-2024` - `1998-2012`) / `1998-2012` * 100
+  ) %>%
+  select(mvm_id, `1990-1997 - 1998-2012`, `1990-1997 - 2012-2024`, `1998-2012 - 2012-2024`) %>%
+  pivot_longer(cols = -mvm_id, names_to = "dunn_test.Comparison", values_to = "MedianChange")
+
+  # Merge the percentage changes with the pairwise results
+pairwise_results <- pairwise_results %>%
+  left_join(percentage_changes, by = c("mvm_id", "dunn_test.Comparison"))
+```
+
+```{r}
 #| fig.cap: TOC changes between periods. Only stations for which Kruskall-Wallis test found a significant difference between periods are included. In the tile is indicated how many station out of all the stations that had significant results between the periods had data for a comparison during the specified periods.
 #| label: fig-bar-TOC
 #| fig-width: 8
@@ -1904,26 +1947,31 @@ kable(summary_dunns)
 
 library(forcats)
 pairwise_results %>% mutate(significance = case_when(
-    dunn_test.P.adj >= 0.05~ "not_sig", 
-    dunn_test.P.adj < 0.05 & dunn_test.Z < 0 ~ "sig_increase",
-    dunn_test.P.adj < 0.05 & dunn_test.Z > 0 ~ "sig_decrease")) %>%
+    dunn_test.P.adj >= 0.05~ "not sig", 
+    dunn_test.P.adj < 0.05 & MedianChange > 0 & MedianChange < 5 ~ "sig increase < 5%",
+    dunn_test.P.adj < 0.05 & MedianChange > 5 ~ "sig increase > 5%",
+    dunn_test.P.adj < 0.05 & MedianChange < 0 & MedianChange > -5 ~ "sig decrease < 5%",
+    dunn_test.P.adj < 0.05 & MedianChange < -5 ~ "sig decrease > 5%")) %>%
   complete(mvm_id, dunn_test.Comparison, fill = list(significance = "no data")) %>% left_join(stations %>% select(mvm_id, stationCoordinateY)) %>% 
   mutate(mvm_id = fct_reorder(as.factor(mvm_id), stationCoordinateY)) %>% 
   mutate(dunn_test.Comparison = str_replace(dunn_test.Comparison, " - ", "\n")) %>% 
-  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997\n1998-2012", "1998-2012\n2012-2024", "1990-1997\n2012-2024")) -> pairwise_results
+  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997\n1998-2012", "1998-2012\n2012-2024", "1990-1997\n2012-2024")) -> pairwise_results_1
 
 
-ggplot(pairwise_results, aes(x = as.factor(mvm_id), fill = significance)) +
+ggplot(pairwise_results_1, aes(x = as.factor(mvm_id), fill = significance)) +
   geom_bar(position = "fill") +
   facet_wrap(~ dunn_test.Comparison) +
   labs(x = "Station (mvm_id)", y = "Proportion", fill = "Significance") +
   theme_minimal() +
-  scale_fill_manual(values = c("sig_increase" = "#D55E00", "sig_decrease" = "#56B4E9", "not_sig" = "#F0E442", "no data" = 'white')) +
+  scale_fill_manual(values = c("sig increase < 5%" = "#E69F00", "sig decrease < 5%" = "#56B4E9", "not sig" = "#F0E442", "no data" = 'white',"sig increase > 5%" = "#D55E00", "sig decrease > 5%" = "#0072B2" )) +
   coord_flip() +
   ylab("Dunn's test")+
   xlab("Stations")+
     theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), axis.text = element_text(size = 4.5))
+
 ```
+
+
 
 ```{r}
 #| tab-cap: Information on how many stations had data for each period for TOC.
@@ -1931,12 +1979,12 @@ ggplot(pairwise_results, aes(x = as.factor(mvm_id), fill = significance)) +
 library(dplyr)
 
 # Calculate the total number of stations for each period
-total_stations_per_period <- pairwise_results %>%
+total_stations_per_period <- pairwise_results_1 %>%
   group_by(dunn_test.Comparison) %>%
   summarise(total_stations = n_distinct(mvm_id))
 
 # Calculate the number of stations for each significance category within each period
-stations_with_data <- pairwise_results %>%
+stations_with_data <- pairwise_results_1 %>%
   group_by(dunn_test.Comparison, significance) %>%
   summarise(num_stations = n_distinct(mvm_id)) %>%
   ungroup()
@@ -1944,14 +1992,15 @@ stations_with_data <- pairwise_results %>%
 # Combine the summaries into a single data frame
 summary_stations <- stations_with_data %>%
   left_join(total_stations_per_period, by = "dunn_test.Comparison") %>%
-  pivot_wider(names_from = significance, values_from = num_stations, values_fill = list(num_stations = 0)) %>%
-  rename(
-    `Total Stations` = total_stations,
-    `Significant Increase` = sig_increase,
-    `Significant Decrease` = sig_decrease,
-    `Not Significant` = not_sig,
-    `No data` = `no data`
-  )
+  pivot_wider(names_from = significance, values_from = num_stations, values_fill = list(num_stations = 0))
+  #  %>%
+  # rename(
+  #   `Total Stations` = total_stations,
+  #   `Significant Increase` = sig_increase,
+  #   `Significant Decrease` = sig_decrease,
+  #   `Not Significant` = not_sig,
+  #   `No data` = `no data`
+  # )
 
 # Print the summary data frame
 kable(summary_stations)
@@ -2097,28 +2146,51 @@ kable(summary_dunns)
 ```
 
 ```{r}
-#| fig-cap: Organic charge density changes between periods. Only stations for which Kruskall-Wallis test found a significant difference between periods are included. In the tile is indicated how many station out of all the stations that had significant results between the periods had data for a comparison during the specified periods. 
+# Calculate the median changes for each comparison
+# Calculate the percentage changes for each comparison
+percentage_changes <- summary_table %>%
+  pivot_longer(cols = starts_with("median_"), names_to = "period", values_to = "median") %>%
+  mutate(period = str_remove(period, "median_")) %>%
+  pivot_wider(names_from = period, values_from = median) %>%
+  mutate(
+    `1990-1997 - 1998-2012` = (`1998-2012` - `1990-1997`) / abs(`1990-1997`) * 100,
+    `1990-1997 - 2012-2024` = (`2012-2024` - `1990-1997`) / abs(`1990-1997`) * 100,
+    `1998-2012 - 2012-2024` = (`2012-2024` - `1998-2012`) / abs(`1998-2012`) * 100
+  ) %>%
+  select(mvm_id, `1990-1997 - 1998-2012`, `1990-1997 - 2012-2024`, `1998-2012 - 2012-2024`) %>%
+  pivot_longer(cols = -mvm_id, names_to = "dunn_test.Comparison", values_to = "MedianChange")
+
+  # Merge the percentage changes with the pairwise results
+pairwise_results <- pairwise_results %>%
+  left_join(percentage_changes, by = c("mvm_id", "dunn_test.Comparison"))
+```
+
+```{r}
+#| fig-cap: Organic charge density changes between periods. Only stations for which Kruskall-Wallis test found a significant difference between periods are included. In the tile is indicated how many station out of all the stations that had significant results between the periods had data for a comparison during the specified periods. Color indicates also if the change in median organic charge density is greater than 5%. 
 #| label: fig-bar-org_density
 #| fig-width: 8
 #| fig-height: 8
 
 library(forcats)
+
 pairwise_results %>% mutate(significance = case_when(
-    dunn_test.P.adj >= 0.05~ "not_sig", 
-    dunn_test.P.adj < 0.05 & dunn_test.Z < 0 ~ "sig_increase",
-    dunn_test.P.adj < 0.05 & dunn_test.Z > 0 ~ "sig_decrease")) %>%
+    dunn_test.P.adj >= 0.05~ "not sig", 
+    dunn_test.P.adj < 0.05 & MedianChange > 0 & MedianChange < 5 ~ "sig increase < 5%",
+    dunn_test.P.adj < 0.05 & MedianChange > 5 ~ "sig increase > 5%",
+    dunn_test.P.adj < 0.05 & MedianChange < 0 & MedianChange > -5 ~ "sig decrease < 5%",
+    dunn_test.P.adj < 0.05 & MedianChange < -5 ~ "sig decrease > 5%")) %>%
   complete(mvm_id, dunn_test.Comparison, fill = list(significance = "no data")) %>% left_join(stations %>% select(mvm_id, stationCoordinateY)) %>% 
   mutate(mvm_id = fct_reorder(as.factor(mvm_id), stationCoordinateY)) %>% 
   mutate(dunn_test.Comparison = str_replace(dunn_test.Comparison, " - ", "\n")) %>% 
-  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997\n1998-2012", "1998-2012\n2012-2024", "1990-1997\n2012-2024")) -> pairwise_results
+  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997\n1998-2012", "1998-2012\n2012-2024", "1990-1997\n2012-2024")) -> pairwise_results_1
 
 
-ggplot(pairwise_results, aes(x = as.factor(mvm_id), fill = significance)) +
+ggplot(pairwise_results_1, aes(x = as.factor(mvm_id), fill = significance)) +
   geom_bar(position = "fill") +
   facet_wrap(~ dunn_test.Comparison) +
   labs(x = "Station (mvm_id)", y = "Proportion", fill = "Significance") +
   theme_minimal() +
-  scale_fill_manual(values = c("sig_increase" = "#D55E00", "sig_decrease" = "#56B4E9", "not_sig" = "#F0E442", "no data" = 'white')) +
+  scale_fill_manual(values = c("sig increase < 5%" = "#E69F00", "sig decrease < 5%" = "#56B4E9", "not sig" = "#F0E442", "no data" = 'white',"sig increase > 5%" = "#D55E00", "sig decrease > 5%" = "#0072B2" )) +
   coord_flip() +
   ylab("Dunn's test")+
   xlab("Stations")+
@@ -2131,12 +2203,12 @@ ggplot(pairwise_results, aes(x = as.factor(mvm_id), fill = significance)) +
 library(dplyr)
 
 # Calculate the total number of stations for each period
-total_stations_per_period <- pairwise_results %>%
+total_stations_per_period <- pairwise_results_1 %>%
   group_by(dunn_test.Comparison) %>%
   summarise(total_stations = n_distinct(mvm_id))
 
 # Calculate the number of stations for each significance category within each period
-stations_with_data <- pairwise_results %>%
+stations_with_data <- pairwise_results_1 %>%
   group_by(dunn_test.Comparison, significance) %>%
   summarise(num_stations = n_distinct(mvm_id)) %>%
   ungroup()
@@ -2144,14 +2216,15 @@ stations_with_data <- pairwise_results %>%
 # Combine the summaries into a single data frame
 summary_stations <- stations_with_data %>%
   left_join(total_stations_per_period, by = "dunn_test.Comparison") %>%
-  pivot_wider(names_from = significance, values_from = num_stations, values_fill = list(num_stations = 0)) %>%
-  rename(
-    `Total Stations` = total_stations,
-    `Significant Increase` = sig_increase,
-    `Significant Decrease` = sig_decrease,
-    `Not Significant` = not_sig,
-    `No data` = `no data`
-  )
+  pivot_wider(names_from = significance, values_from = num_stations, values_fill = list(num_stations = 0)) 
+  # %>%
+  # rename(
+  #   `Total Stations` = total_stations,
+  #   `Significant Increase` = sig_increase,
+  #   `Significant Decrease` = sig_decrease,
+  #   `Not Significant` = not_sig,
+  #   `No data` = `no data`
+  # )
 
 # Print the summary data frame
 kable(summary_stations)
@@ -2275,6 +2348,9 @@ ggplot(summary_significance, aes(x = significant, y = n, fill = significant)) +
   theme_minimal() +
   scale_fill_brewer(palette = "Set2")
 ```
+
+
+
 ```{r}
 #| cache-refresh: true
 #| label: tbl-weak_acids-significance
@@ -2322,6 +2398,26 @@ kable(summary_dunns)
 ```
 
 ```{r}
+# Calculate the median changes for each comparison
+# Calculate the percentage changes for each comparison
+percentage_changes <- summary_table %>%
+  pivot_longer(cols = starts_with("median_"), names_to = "period", values_to = "median") %>%
+  mutate(period = str_remove(period, "median_")) %>%
+  pivot_wider(names_from = period, values_from = median) %>%
+  mutate(
+    `1990-1997 - 1998-2012` = (`1998-2012` - `1990-1997`) / `1990-1997` * 100,
+    `1990-1997 - 2012-2024` = (`2012-2024` - `1990-1997`) / `1990-1997` * 100,
+    `1998-2012 - 2012-2024` = (`2012-2024` - `1998-2012`) / `1998-2012` * 100
+  ) %>%
+  select(mvm_id, `1990-1997 - 1998-2012`, `1990-1997 - 2012-2024`, `1998-2012 - 2012-2024`) %>%
+  pivot_longer(cols = -mvm_id, names_to = "dunn_test.Comparison", values_to = "MedianChange")
+
+  # Merge the percentage changes with the pairwise results
+pairwise_results <- pairwise_results %>%
+  left_join(percentage_changes, by = c("mvm_id", "dunn_test.Comparison"))
+```
+
+```{r}
 #| fig.cap: Contribution of non-organic weak acids to charge changes between periods. Only stations for which Kruskall-Wallis test found a significant difference between periods are included. In the tile is indicated how many station out of all the stations that had significant results between the periods had data for a comparison during the specified periods.
 #| label: fig-bar-weak_acids
 #| fig-width: 8
@@ -2329,21 +2425,23 @@ kable(summary_dunns)
 
 library(forcats)
 pairwise_results %>% mutate(significance = case_when(
-    dunn_test.P.adj >= 0.05~ "not_sig", 
-    dunn_test.P.adj < 0.05 & dunn_test.Z < 0 ~ "sig_increase",
-    dunn_test.P.adj < 0.05 & dunn_test.Z > 0 ~ "sig_decrease")) %>%
+    dunn_test.P.adj >= 0.05~ "not sig", 
+    dunn_test.P.adj < 0.05 & MedianChange > 0 & MedianChange < 5 ~ "sig increase < 5%",
+    dunn_test.P.adj < 0.05 & MedianChange > 5 ~ "sig increase > 5%",
+    dunn_test.P.adj < 0.05 & MedianChange < 0 & MedianChange > -5 ~ "sig decrease < 5%",
+    dunn_test.P.adj < 0.05 & MedianChange < -5 ~ "sig decrease > 5%")) %>%
   complete(mvm_id, dunn_test.Comparison, fill = list(significance = "no data")) %>% left_join(stations %>% select(mvm_id, stationCoordinateY)) %>% 
   mutate(mvm_id = fct_reorder(as.factor(mvm_id), stationCoordinateY)) %>% 
   mutate(dunn_test.Comparison = str_replace(dunn_test.Comparison, " - ", "\n")) %>% 
-  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997\n1998-2012", "1998-2012\n2012-2024", "1990-1997\n2012-2024")) -> pairwise_results
+  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997\n1998-2012", "1998-2012\n2012-2024", "1990-1997\n2012-2024")) -> pairwise_results_1
 
 
-ggplot(pairwise_results, aes(x = as.factor(mvm_id), fill = significance)) +
+ggplot(pairwise_results_1, aes(x = as.factor(mvm_id), fill = significance)) +
   geom_bar(position = "fill") +
   facet_wrap(~ dunn_test.Comparison) +
   labs(x = "Station (mvm_id)", y = "Proportion", fill = "Significance") +
   theme_minimal() +
-  scale_fill_manual(values = c("sig_increase" = "#D55E00", "sig_decrease" = "#56B4E9", "not_sig" = "#F0E442", "no data" = 'white')) +
+  scale_fill_manual(values = c("sig increase < 5%" = "#E69F00", "sig decrease < 5%" = "#56B4E9", "not sig" = "#F0E442", "no data" = 'white',"sig increase > 5%" = "#D55E00", "sig decrease > 5%" = "#0072B2" )) +
   coord_flip() +
   ylab("Dunn's test")+
   xlab("Stations")+
@@ -2356,12 +2454,12 @@ ggplot(pairwise_results, aes(x = as.factor(mvm_id), fill = significance)) +
 library(dplyr)
 
 # Calculate the total number of stations for each period
-total_stations_per_period <- pairwise_results %>%
+total_stations_per_period <- pairwise_results_1 %>%
   group_by(dunn_test.Comparison) %>%
   summarise(total_stations = n_distinct(mvm_id))
 
 # Calculate the number of stations for each significance category within each period
-stations_with_data <- pairwise_results %>%
+stations_with_data <- pairwise_results_1 %>%
   group_by(dunn_test.Comparison, significance) %>%
   summarise(num_stations = n_distinct(mvm_id)) %>%
   ungroup()
@@ -2369,14 +2467,15 @@ stations_with_data <- pairwise_results %>%
 # Combine the summaries into a single data frame
 summary_stations <- stations_with_data %>%
   left_join(total_stations_per_period, by = "dunn_test.Comparison") %>%
-  pivot_wider(names_from = significance, values_from = num_stations, values_fill = list(num_stations = 0)) %>%
-  rename(
-    `Total Stations` = total_stations,
-    `Significant Increase` = sig_increase,
-    `Significant Decrease` = sig_decrease,
-    `Not Significant` = not_sig,
-    `No data` = `no data`
-  )
+  pivot_wider(names_from = significance, values_from = num_stations, values_fill = list(num_stations = 0)) 
+  # %>%
+  # rename(
+  #   `Total Stations` = total_stations,
+  #   `Significant Increase` = sig_increase,
+  #   `Significant Decrease` = sig_decrease,
+  #   `Not Significant` = not_sig,
+  #   `No data` = `no data`
+  # )
 
 # Print the summary data frame
 kable(summary_stations)
