@@ -396,6 +396,7 @@ if (re.read != 're fig' & exists("trendplotdata_selected_TOC")){
 ```
 ```{r}
 #| echo: false
+#| eval: false
 #| fig-cap: "Lasange plot of TOC trends across Sweden. Updated from Eklöf et al, 2020. Using 136 stations for which charge density was sucessfully calculated for."
 #| fig-subcap:
 #|        - "Using all 316 stations that fit the selection criteria of 10+ years of TOC data and < 5 percent urban area."
@@ -404,8 +405,22 @@ if (re.read != 're fig' & exists("trendplotdata_selected_TOC")){
 #| label: fig-TOC-lasnage
 #| layout-ncol: 2
 #| fig-height: 8
-knitr::include_graphics(path = c("figures/TOC_lasange.png","figures/TOC_lasange_selected.png"), error = FALSE)
+knitr::include_graphics(path = c("figures/TOC_lasange.png","figures/TOC_lasange_selected.png",), error = FALSE)
 ```
+
+
+### combined 
+
+```{r}
+#| echo: false
+#| fig-cap: "Proportion of poth sVISa and TOC"
+#| fig-alt: All proportion of trends plot.
+#| label: fig-all-prop
+#| layout-ncol: 2
+
+knitr::include_graphics(path = c("figures/TOC_proportion.png","figures/TOC_proportion_selected.png","figures/sVISa_proportion.png","figures/sVISa_proportion_selected.png" ), error = FALSE)
+```
+
 
 ---
 
@@ -432,7 +447,7 @@ The following steps were performed to get final values of charge density (charge
  
 ```{r}
 #| echo: false
-#| fig-cap: 136 stations with available data that were sucessfully modelled in this study. The size of the marker is related to the size of the color while the color shows the mean specific discharge (left), the annual precipitation (middle), and the annual mean tempertaur(right) of the catchment of the station.
+#| fig-cap: 136 stations with available data that were sucessfully modelled in this study. The size of the marker is related to the size of the catchment while the color shows the mean specific discharge (left), the annual precipitation (middle), and the annual mean tempertaur(right) of the catchment of the station.
 #| fig-alt: Map of stations
 #| label: fig-map-stations
 #| out-width: 100%
@@ -479,6 +494,11 @@ mvm_counts <- data %>%
   group_by(mvm_id) %>%
   summarise(sample_count = n())
   
+
+print("Number of samples before")
+
+
+
 # Lets have a look at the stations when we exclude the samples that are not measured at SLU
 data %>% filter(sample_id %in% sample_ids$sample_id)%>% select(mvm_id) %>%
   group_by(mvm_id) %>%
@@ -489,7 +509,11 @@ data %>% filter(sample_id %in% sample_ids$sample_id)%>% select(mvm_id) %>%
 
 mvm_ids <- stations$mvm_id
 
+
 data %>% filter(mvm_id %in% mvm_ids) -> data
+
+print("Number of samples after")
+
 
 data %>% mutate(EC_mS_m = coalesce(Kond_25_mSm, Kond_mSm, Kond_20_mSm, NA))-> data
 
@@ -598,19 +622,68 @@ $$
 #|    - Before filtering of charge difference < 0.5%
 #|    - After filtering of charge difference < 0.5%
 #| layout-ncol: 2
-ggplot(data, aes(x = org_charge_eq_mg_C)) +
+p1 <- ggplot(data %>% mutate(org_charge= org_charge_eq_mg_C * 1000 * 1000), aes(x = org_charge)) +
   geom_histogram(fill = "skyblue", color = "black", alpha = 0.7) +
   labs(title = "",
-       x = "charge density (charge/ mg C)",
+       x = "charge density (meq/g C)",
        y = "Frequency") +
   theme_minimal()
 
-ggplot(data %>% filter(abs(charge_diff) < 0.5), aes(x = org_charge_eq_mg_C)) +
+p1
+
+ p1 %>% ggsave(file = "figures/charge_density_hist_bf.png", width = 8,
+  height = 6,
+  units = "cm",
+  dpi = 300) 
+
+p2 <- ggplot(data %>% filter(abs(charge_diff) < 0.5) %>% mutate(org_charge_density_meq_l = org_charge_eq_mg_C * 1000 * 1000), aes(x = org_charge_density_meq_l)) +
   geom_histogram(fill = "skyblue", color = "black", alpha = 0.7) +
   labs(title = "",
-       x = "charge density (charge/ mg C)",
+       x = "charge density (meq/g C)",
        y = "Frequency") +
   theme_minimal()
+
+p2
+
+p2 %>% ggsave(file = "figures/charge_density_hist_af.png", width = 8,
+  height = 6,
+  units = "cm",
+  dpi = 300) 
+
+
+
+```
+
+```{r}
+#| fig-cap: Scatterplot of charge density and adom/doc for samples before and after filtering. 
+
+#| label: fig-scat_cd_adom_doc
+#| fig-subcap:
+#|    - Before filtering of charge difference < 0.5%
+#|    - After filtering of charge difference < 0.5%
+#| layout-ncol: 2
+#| 
+ggplot(data  %>% mutate(org_charge_density_meq_l = org_charge_eq_mg_C * 1000 * 1000), aes(x = org_charge_density_meq_l, y = adom_doc, fill = charge_diff)) +
+  geom_point( alpha = 0.5) +
+  labs(title = "",
+       x = "charge density (meq/g C)",
+       y = "adom/doc") +
+  theme_minimal()
+
+ggplot(data %>% filter(abs(charge_diff) < 0.5) %>% mutate(org_charge_density_meq_l = org_charge_eq_mg_C * 1000 * 1000), aes(x = org_charge_density_meq_l, y = adom_doc, colour = log(Sum.of.cations))) +
+  geom_point() +
+  labs(title = "",
+       x = "charge density (meq/g C)",
+       y = "adom/doc") +
+  theme_minimal() 
+
+  ggplot(data %>% filter(abs(charge_diff) < 0.5) %>% mutate(org_charge_density_meq_l = org_charge_eq_mg_C * 1000 * 1000), aes(x = org_charge_density_meq_l, y = adom_doc)) +
+  geom_point(color = "skyblue", color = "black", alpha = 0.7) +
+  labs(title = "",
+       x = "charge density (meq/g C)",
+       y = "adom/doc") +
+  theme_minimal()+
+  geom_point(data = data %>% filter(abs(charge_diff) > 0.5) %>% mutate(org_charge_density_meq_l = org_charge_eq_mg_C * 1000 * 1000), aes(x = org_charge_density_meq_l, y = adom_doc), color = "black", color = "black", alpha = 0.7)
 ```
 
 ---
@@ -967,8 +1040,14 @@ In this section we test for normality of the data, compare the variation within 
 
 ```{r}
 #| cache-refresh: true
-data %>% filter(abs(charge_diff) < 0.5) %>% mutate(sVISa = Abs_F420_5cm/(TOC_mol*12.01*1000)) -> data
-data %>% mutate(year = year(sampling_date), TOC_mg_l = TOC_mol*12.01*1000, org_charge_density_meq_g_C = org_charge_eq_mg_C * 1000*1000,`Al3+ (µmol/l)` = Al.3 *1000000, `Si (mmol/l)` = Si_mol* 1000, `Cl (mmol/l)` = Cl_mol*1000, `Al total (µmol/l)` = Al_mol * 1000000, `F (µmol/l)` = Fluorid_mol *1000000, `NO3 (mol/l)` = NO3_N_mol) %>% select(year,EC_mS_m, sVISa,org_charge_density_meq_g_C,TOC_mg_l,SO4_mol,Alk_Acid_mol, sampling_date, Abs_F420_5cm, mvm_id, adom_doc, charge_diff, org_charge, Sum.of.cations, Sum.of.anions, pH_, Ionic.strength, sample_id, `Al3+ (µmol/l)`, `Si (mmol/l)`, `Cl (mmol/l)`,`Al total (µmol/l)`,`F (µmol/l)`, `NO3 (mol/l)`) -> data_1
+
+# `Al3+ (µmol/l)` = Al.3 *1000000,
+data %>% filter(abs(charge_diff) < 0.5) %>% mutate(sVISa = Abs_F420_5cm/(TOC_mol*12.01*1000))  %>% mutate(year = year(sampling_date), TOC_mg_l = TOC_mol*12.01*1000, org_charge_density_meq_g_C = org_charge_eq_mg_C * 1000*1000, `Si (mmol/l)` = Si_mol* 1000, `Cl (mmol/l)` = Cl_mol*1000, `Al total (µmol/l)` = Al_mol * 1000000, `F (µmol/l)` = Fluorid_mol *1000000, `NO3 (mmol/l)` = NO3_N_mol * 1000) %>% select(year,EC_mS_m, sVISa,org_charge_density_meq_g_C,TOC_mg_l,SO4_mol,Alk_Acid_mol, sampling_date, Abs_F420_5cm, mvm_id, adom_doc, charge_diff, org_charge, Sum.of.cations, Sum.of.anions, pH_, Ionic.strength, sample_id,  `Si (mmol/l)`, `Cl (mmol/l)`,`Al total (µmol/l)`,`F (µmol/l)`, `NO3 (mmol/l)`) -> data_1
+
+data %>% filter(abs(charge_diff) < 0.5) %>% mutate(sVISa = Abs_F420_5cm/(TOC_mol*12.01*1000))  %>% mutate(year = year(sampling_date), TOC_mg_l = TOC_mol*12.01*1000, org_charge_density_meq_g_C = org_charge_eq_mg_C * 1000*1000, `Si (mmol/l)` = Si_mol* 1000, `Cl (mmol/l)` = Cl_mol*1000, `Al total (µmol/l)` = Al_mol * 1000000, `F (µmol/l)` = Fluorid_mol *1000000, `NO3 (mmol/l)` = NO3_N_mol * 1000) %>% select(year,EC_mS_m, sVISa,org_charge_density_meq_g_C,TOC_mg_l,SO4_mol,Alk_Acid_mol, sampling_date, Abs_F420_5cm, mvm_id, adom_doc, charge_diff, org_charge, Sum.of.cations, Sum.of.anions, pH_, Ionic.strength, sample_id,  `Si (mmol/l)`, `Cl (mmol/l)`,`Al total (µmol/l)`,`F (µmol/l)`, `NO3 (mmol/l)`, Fluorid_mol,Na_mol,K_mol, Ca_mol,Fe_mol,SO4_mol,Si_mol, NH4_N_mol,Cl_mol, NO3_N_mol,Fluorid_mol,Na_mol,Mn_mol,Zn_mol,Cu_mol,Mg_mol) -> data_12
+
+
+saveRDS(data_12, file = "../results/r_py/data_1.rds")
 ```
 
 ```{r}
@@ -998,13 +1077,15 @@ data_1_with_weights <- data_1 %>%
 #| tbl-cap: Water chemistry values measured and modelled for the stations used in this study, weighted porportional to number of samples for each station. 
 library(vtable)
 library(matrixStats)
-sumtable(data_1_with_weights %>% mutate(
+
+# add min and max of each station to the table
+data_table <- data_1_with_weights %>% mutate(
   `SO4 (mmol/l)` = SO4_mol *1000,
   `Alk Acid (mmol/l)` = Alk_Acid_mol *1000,
   `Organic charge (meq/l)` = org_charge*1000, 
   `Sum of Cations (mmol/l)` = Sum.of.cations*1000
   )  %>% select(-c(
-    SO4_mol, charge_diff, Alk_Acid_mol, org_charge, Sum.of.cations, Sum.of.anions, sample_id, mvm_id, weight
+    SO4_mol, charge_diff, Alk_Acid_mol, org_charge, Sum.of.cations, Sum.of.anions, sample_id,weight
     )) %>% rename(
       `TOC (mg/l)` = TOC_mg_l,
       `Org. Charge Density (meq/g of C)` = org_charge_density_meq_g_C,
@@ -1013,9 +1094,23 @@ sumtable(data_1_with_weights %>% mutate(
       `ADOM/DOC` = adom_doc,
       `Ionic strength` = Ionic.strength, 
       `Field pH` = pH_
-    ), out = "kable", group.weights = data_1_with_weights$weight,summ=c('notNA(x)',
+    )
+
+
+summary_stats <- data_table %>% group_by(mvm_id) %>% summarise(across(where(is.numeric), median, na.rm = TRUE),
+            across(where(is.character), first))
+min_values <- sapply(summary_stats, min, na.rm = TRUE)
+max_values <- sapply(summary_stats, max, na.rm = TRUE)
+
+
+
+table_summary <- sumtable(data_table %>% select(-mvm_id), out = "return", group.weights = data_1_with_weights$weight,summ=c('notNA(x)',
                 'reldist::wtd.quantile (x, q=0.50, na.rm = TRUE, weight = wts)',
-                'reldist::wtd.quantile (x, q=0.75, na.rm = TRUE, weight = wts) - reldist::wtd.quantile (x, q=0.25, na.rm = TRUE, weight = wts)', 'reldist::wtd.quantile (x, q=0, na.rm = TRUE, weight = wts)', 'reldist::wtd.quantile (x, q=1, na.rm = TRUE, weight = wts)'), summ.names = c("N", "Median", "IQR", "min", "max")) # %>% kable_styling(font_size = 10)
+                'reldist::wtd.quantile (x, q=0.75, na.rm = TRUE, weight = wts) - reldist::wtd.quantile (x, q=0.25, na.rm = TRUE, weight = wts)'), summ.names = c("N", "Median", "IQR")) # %>% kable_styling(font_size = 10)
+
+table_summary %>% 
+  mutate(MinValue = round(as.numeric(min_values[Variable]), digits = 3),
+         MaxValue = round(as.numeric(max_values[Variable]), digits = 3)) %>% kable(., digits = 2)
 ```
 
 
@@ -1081,7 +1176,13 @@ For organic charge density I would also say that although it is not perfectly no
 #|        - "QQ-plot"
 #| label: fig-norm-org-density
 #| layout-ncol: 2
-plot_norm(data_1$org_charge_density_meq_g_C, name = "Organic charge density (meq/g of C)")
+plot_norm(data_1$org_charge_density_meq_g_C, name = "Organic charge density (meq/g of C)") -> p2
+
+p2 %>% ggsave(file = "figures/charge_density_normal.png", width = 8,
+  height = 6,
+  units = "cm",
+  dpi = 300) 
+p2  
 ```
 
 ```{r}
@@ -1091,7 +1192,13 @@ plot_norm(data_1$org_charge_density_meq_g_C, name = "Organic charge density (meq
 #|        - "QQ-plot"
 #| label: fig-norm-org-density-log
 #| layout-ncol: 2
-plot_norm(log(-data_1$org_charge_density_meq_g_C), name = "log (Organic charge density (meq/g of C))")
+plot_norm(log(-data_1$org_charge_density_meq_g_C), name = "log (Organic charge density (meq/g of C))") -> p2
+
+ ggsave(file = "figures/charge_density_normal_2.png", width = 8,
+  height = 6,
+  units = "cm",
+  dpi = 300) 
+p2  
 ```
 
 ### Conclusion
@@ -1107,7 +1214,7 @@ I would have said that they are all pretty close to normal distribution as long 
 library(ggplot2)
 library(tidyr)
 
-plot_variable_distribution <- function(data, variable_name) {
+plot_variable_distribution <- function(data, variable_name, title, legend = "Yes") {
   # Dynamically evaluate the variable column from the data
   aggregated_data <- aggregate(
     reformulate("mvm_id", variable_name),  # Use reformulate for dynamic column names
@@ -1143,7 +1250,13 @@ plot_variable_distribution <- function(data, variable_name) {
     ) +
     scale_fill_manual(values = c("lightblue", "orange")) +  # Custom colors
     scale_color_manual(values = c("blue", "darkorange")) +
-    theme_minimal()
+    theme_minimal() + xlab(title) -> plot
+
+  if (legend == "No"){
+    plot <- plot + theme(legend.position = "none")
+  }
+
+    return(plot)
 }
 ```
 
@@ -1156,23 +1269,27 @@ plot_variable_distribution <- function(data, variable_name) {
 
 
 # Calculate the weighted median, 25th percentile, and 75th percentile
-weighted_median <- weightedMedian(data_1_with_weights$TOC_mg_l, w = data_1_with_weights$weight, na.rm = TRUE)
-weighted_25th <- weightedQuantile(data_1_with_weights$TOC_mg_l, w = data_1_with_weights$weight, probs = 0.25, na.rm = TRUE)
-weighted_75th <- weightedQuantile(data_1_with_weights$TOC_mg_l, w = data_1_with_weights$weight, probs = 0.75, na.rm = TRUE)
+weighted_median1 <- weightedMedian(data_1_with_weights$TOC_mg_l, w = data_1_with_weights$weight, na.rm = TRUE)
+weighted_25th1 <- weightedQuantile(data_1_with_weights$TOC_mg_l, w = data_1_with_weights$weight, probs = 0.25, na.rm = TRUE)
+weighted_75th1 <- weightedQuantile(data_1_with_weights$TOC_mg_l, w = data_1_with_weights$weight, probs = 0.75, na.rm = TRUE)
 
 # Create the boxplot and add the horizontal lines for the weighted median, 25th, and 75th percentiles
 data_1 %>%
   mutate(mvm_id = as.factor(mvm_id)) %>%
   ggplot(aes(x = mvm_id, y = TOC_mg_l)) +
-  geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = weighted_25th, ymax = weighted_75th), fill = "lightblue", alpha = 0.2) +
-  geom_hline(yintercept = weighted_median, linetype = "dashed", color = "red") +
-  geom_hline(yintercept = weighted_25th, linetype = "dotted", color = "blue") +
-  geom_hline(yintercept = weighted_75th, linetype = "dotted", color = "blue") +
-  theme_minimal() +
-  theme(legend.position = "none") +
+  geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = weighted_25th1, ymax = weighted_75th1), fill = "lightblue", alpha = 0.2) +
+  geom_hline(yintercept = weighted_median1, linetype = "dashed", color = "red") +
+  geom_hline(yintercept = weighted_25th1, linetype = "dotted", color = "blue") +
+  geom_hline(yintercept = weighted_75th1, linetype = "dotted", color = "blue")   + 
   geom_boxplot(outlier.shape = NA, alpha = 0.5 ) +
-  labs(y = "TOC (mg/l)", x = "Station")+
-  theme(axis.text.x = element_blank())
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"), axis.text.x=element_blank(), 
+      axis.ticks.x=element_blank())+
+  theme(legend.position = "none") +
+  labs(y = "TOC (mg/l)", x = "Station") + ylim(0,75)   -> p_TOC
+
+p_TOC
 ```
 
 ### sVISa
@@ -1180,23 +1297,27 @@ data_1 %>%
 #| fig-cap: Boxplot for each of the stations sample distribution of sVISa. The blue box is the weighted IQR for all the stations, with the red dashed line as the weighted median for all the stations. 
 #| label: fig-variation-sVISa
 # Calculate the weighted median, 25th percentile, and 75th percentile
-weighted_median <- weightedMedian(data_1_with_weights$TOC_mg_l, w = data_1_with_weights$weight, na.rm = TRUE)
-weighted_25th <- weightedQuantile(data_1_with_weights$TOC_mg_l, w = data_1_with_weights$weight, probs = 0.25, na.rm = TRUE)
-weighted_75th <- weightedQuantile(data_1_with_weights$TOC_mg_l, w = data_1_with_weights$weight, probs = 0.75, na.rm = TRUE)
+weighted_median2 <- weightedMedian(data_1_with_weights$sVISa, w = data_1_with_weights$weight, na.rm = TRUE)
+weighted_25th2 <- weightedQuantile(data_1_with_weights$sVISa, w = data_1_with_weights$weight, probs = 0.25, na.rm = TRUE)
+weighted_75th2 <- weightedQuantile(data_1_with_weights$sVISa, w = data_1_with_weights$weight, probs = 0.75, na.rm = TRUE)
 
 # Create the boxplot and add the horizontal lines for the weighted median, 25th, and 75th percentiles
 data_1 %>%
   mutate(mvm_id = as.factor(mvm_id)) %>%
-  ggplot(aes(x = mvm_id, y = TOC_mg_l)) +
-  geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = weighted_25th, ymax = weighted_75th), fill = "lightblue", alpha = 0.2) +
-  geom_hline(yintercept = weighted_median, linetype = "dashed", color = "red") +
-  geom_hline(yintercept = weighted_25th, linetype = "dotted", color = "blue") +
-  geom_hline(yintercept = weighted_75th, linetype = "dotted", color = "blue") +
-  theme_minimal() +
-  theme(legend.position = "none") +
+  ggplot(aes(x = mvm_id, y = sVISa)) +
+  geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = weighted_25th2, ymax = weighted_75th2), fill = "lightblue", alpha = 0.2) +
+  geom_hline(yintercept = weighted_median2, linetype = "dashed", color = "red") +
+  geom_hline(yintercept = weighted_25th2, linetype = "dotted", color = "blue") +
+  geom_hline(yintercept = weighted_75th2, linetype = "dotted", color = "blue")   + 
   geom_boxplot(outlier.shape = NA, alpha = 0.5 ) +
-  labs(y = "TOC (mg/l)", x = "Station")+
-  theme(axis.text.x = element_blank())
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"), axis.text.x=element_blank(), 
+      axis.ticks.x=element_blank())+
+  theme(legend.position = "none") +
+  labs(y = "sVISa", x = "Station") + ylim(0,0.05)  -> p_sVISa
+
+p_sVISa
 ```
 
 ### Organic charge density
@@ -1205,23 +1326,27 @@ data_1 %>%
 #| label: fig-variation-org-charge-density
 
 # Calculate the weighted median, 25th percentile, and 75th percentile
-weighted_median <- weightedMedian(data_1_with_weights$org_charge_density_meq_g_C, w = data_1_with_weights$weight, na.rm = TRUE)
-weighted_25th <- weightedQuantile(data_1_with_weights$org_charge_density_meq_g_C, w = data_1_with_weights$weight, probs = 0.25, na.rm = TRUE)
-weighted_75th <- weightedQuantile(data_1_with_weights$org_charge_density_meq_g_C, w = data_1_with_weights$weight, probs = 0.75, na.rm = TRUE)
+weighted_median3 <- weightedMedian(data_1_with_weights$org_charge_density_meq_g_C, w = data_1_with_weights$weight, na.rm = TRUE)
+weighted_25th3 <- weightedQuantile(data_1_with_weights$org_charge_density_meq_g_C, w = data_1_with_weights$weight, probs = 0.25, na.rm = TRUE)
+weighted_75th3 <- weightedQuantile(data_1_with_weights$org_charge_density_meq_g_C, w = data_1_with_weights$weight, probs = 0.75, na.rm = TRUE)
 
 # Create the boxplot and add the horizontal lines for the weighted median, 25th, and 75th percentiles
 data_1 %>%
   mutate( mvm_id = as.factor(mvm_id)) %>%
   ggplot(aes(x = mvm_id, y = org_charge_density_meq_g_C)) +
-  geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = weighted_25th, ymax = weighted_75th), fill = "lightblue", alpha = 0.2) +
-  geom_hline(yintercept = weighted_median, linetype = "dashed", color = "red") +
-  geom_hline(yintercept = weighted_25th, linetype = "dotted", color = "blue") +
-  geom_hline(yintercept = weighted_75th, linetype = "dotted", color = "blue") +
-  theme_minimal() +
-  theme(legend.position = "none") +
+  geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = weighted_25th3, ymax = weighted_75th3), fill = "lightblue", alpha = 0.2) +
+  geom_hline(yintercept = weighted_median3, linetype = "dashed", color = "red") +
+  geom_hline(yintercept = weighted_25th3, linetype = "dotted", color = "blue") +
+  geom_hline(yintercept = weighted_75th3, linetype = "dotted", color = "blue")   + 
   geom_boxplot(outlier.shape = NA, alpha = 0.5 ) +
-  labs(y = "Org Charge Density (mmeq/g of C)", x = "Station")+
-  theme(axis.text.x = element_blank())
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"), axis.text.x=element_blank(), 
+      axis.ticks.x=element_blank())+
+  theme(legend.position = "none") +
+  labs(y = "OMCD (meq/g of C)", x = "Station") + ylim(-15,0)-> p_orgd
+
+p_orgd
 ```
 
 ### Organic charge
@@ -1231,23 +1356,35 @@ data_1 %>%
 #| label: fig-variation-org-charge
 
 # Calculate the weighted median, 25th percentile, and 75th percentile
-weighted_median <- weightedMedian(data_1_with_weights$org_charge * 1000, w = data_1_with_weights$weight, na.rm = TRUE)
-weighted_25th <- weightedQuantile(data_1_with_weights$org_charge * 1000, w = data_1_with_weights$weight, probs = 0.25, na.rm = TRUE)
-weighted_75th <- weightedQuantile(data_1_with_weights$org_charge * 1000, w = data_1_with_weights$weight, probs = 0.75, na.rm = TRUE)
+weighted_median4 <- weightedMedian(data_1_with_weights$org_charge * 1000, w = data_1_with_weights$weight, na.rm = TRUE)
+weighted_25th4 <- weightedQuantile(data_1_with_weights$org_charge * 1000, w = data_1_with_weights$weight, probs = 0.25, na.rm = TRUE)
+weighted_75th4 <- weightedQuantile(data_1_with_weights$org_charge * 1000, w = data_1_with_weights$weight, probs = 0.75, na.rm = TRUE)
 
 # Create the boxplot and add the horizontal lines for the weighted median, 25th, and 75th percentiles
 data_1 %>%
   mutate(org_charge_mmol_l = org_charge * 1000, mvm_id = as.factor(mvm_id)) %>%
   ggplot(aes(x = mvm_id, y = org_charge_mmol_l)) +
-  geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = weighted_25th, ymax = weighted_75th), fill = "lightblue", alpha = 0.2) +
-  geom_hline(yintercept = weighted_median, linetype = "dashed", color = "red") +
-  geom_hline(yintercept = weighted_25th, linetype = "dotted", color = "blue") +
-  geom_hline(yintercept = weighted_75th, linetype = "dotted", color = "blue") +
-  theme_minimal() +
-  theme(legend.position = "none") +
+  geom_rect(aes(xmin = -Inf, xmax = Inf, ymin = weighted_25th4, ymax = weighted_75th4), fill = "lightblue", alpha = 0.2) +
+  geom_hline(yintercept = weighted_median4, linetype = "dashed", color = "red") +
+  geom_hline(yintercept = weighted_25th4, linetype = "dotted", color = "blue") +
+  geom_hline(yintercept = weighted_75th4, linetype = "dotted", color = "blue")   + 
   geom_boxplot(outlier.shape = NA, alpha = 0.5 ) +
-  labs(y = "Org Charge (mmol/l)", x = "Station")+
-  theme(axis.text.x = element_blank())
+  theme_bw() + 
+  theme(panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"), axis.text.x=element_blank(), 
+      axis.ticks.x=element_blank())+
+  theme(legend.position = "none") +
+  labs(y = "Org Charge (mmol/l)", x = "Station")  + ylim(-0.4, 0.05) -> p_orgc
+
+p_orgc
+```
+
+```{r}
+library(cowplot)
+# plot_grid(p_TOC, p_sVISa, p_orgd, p_orgc, labels = "auto", label_fontface = "plain") %>% ggsave(file = "figures/variation_comp.png", width = 35,
+#   height = 20,
+#   units = "cm",
+#   dpi = 300)
 ```
 
 
@@ -1263,10 +1400,21 @@ data_1 %>%
 #| label: fig-variation
 #| layout-ncol: 2
 
-plot_variable_distribution(data_1, "sVISa")
-plot_variable_distribution(data_1, "TOC_mg_l")
-plot_variable_distribution(data_1, "org_charge_density_meq_g_C")
-plot_variable_distribution(data_1 %>% mutate(org_charge_mmol_l = org_charge *1000), "org_charge_mmol_l")
+
+p1 <- plot_variable_distribution(data_1, "TOC_mg_l", "TOC (mg/l)", legend = "No")
+p2 <- plot_variable_distribution(data_1, "sVISa", "sVISa" , legend = "No")
+p3 <- plot_variable_distribution(data_1 %>% mutate(org_charge_density_meq_g_C = -org_charge_density_meq_g_C), "org_charge_density_meq_g_C", "OMCD (-meq/g C))", legend = "No")
+p4 <- plot_variable_distribution(data_1 %>% mutate(org_charge_mmol_l = org_charge *1000), "org_charge_mmol_l", "Org. charge (mmol/l)")
+
+# plot_grid(p1, p2, p3, p4, labels = "auto", label_fontface = "plain", align = "hv") %>% ggsave(file = "figures/variation_kernel.png", width = 35,
+#   height = 20,
+#   units = "cm",
+#   dpi = 300)
+
+p1
+p2
+p3
+p4
 ```
 
 
@@ -1310,7 +1458,7 @@ For each individual catchemnt split into three time periods, has to have at leas
 The three periods are: 
 
 - 1990-1997
-- 1998-2012
+- 1998-2011
 - 2013-2024
 
 For each stations we split the data into these three periods, then we test the data within each stations for changes between the periods using Kruskal-Wallis. 
@@ -1321,17 +1469,19 @@ data_periods <- data_1 %>%
   mutate(
     period = case_when(
       sampling_date < as.Date("1998-01-01") ~ "1990-1997",
-      sampling_date >= as.Date("1997-01-01") & sampling_date <= as.Date("2012-01-01") ~ "1998-2012",
+      sampling_date >= as.Date("1998-01-01") & sampling_date <= as.Date("2012-01-01") ~ "1998-2011",
       sampling_date > as.Date("2012-01-01") ~ "2012-2024",
       TRUE ~ NA_character_  # Handle any NA values if necessary
     ),
-   weak_acids = 100*((Sum.of.anions -(-org_charge + 2*SO4_mol + `Cl (mmol/l)`/1000 + `NO3 (mol/l)` )) / Sum.of.anions), sampling_date = as.Date(sampling_date),
- strong_acids = 100*((2*SO4_mol + `Cl (mmol/l)`/1000 + `NO3 (mol/l)` )/Sum.of.anions),
+   weak_acids = 100*((Sum.of.anions -(-org_charge + 2*SO4_mol + `Cl (mmol/l)`/1000 + `NO3 (mmol/l)`/1000 )) / Sum.of.anions), sampling_date = as.Date(sampling_date),
+ strong_acids = 100*((2*SO4_mol + `Cl (mmol/l)`/1000 + `NO3 (mmol/l)`/1000 )/Sum.of.anions),
  organic_acids = (-org_charge / Sum.of.anions) *100 )
 
 
 ```
-
+```{r}
+# Find catchments taht havbe data in all three periods 
+```
 ```{r}
 #| cache-refresh: true
 #| label: tbl-chemistry-periods
@@ -1360,7 +1510,7 @@ sumtable(data_with_weights %>% mutate(
     SO4_mol, charge_diff, Alk_Acid_mol, Sum.of.cations, sample_id, mvm_id
     )) %>% rename(
       `TOC (mg/l)` = TOC_mg_l,
-      `Org. Charge Density (meq/g of C)` = org_charge_density_meq_g_C,
+      `Org. Charge Density (-meq/g of C)` = org_charge_density_meq_g_C,
       `EC (mS/M)` = EC_mS_m,
       `Absorbance 420mm` = Abs_F420_5cm, 
       `ADOM/DOC` = adom_doc,
@@ -1401,12 +1551,12 @@ data_with_weights %>% mutate(
   `SO4 (mmol/l)` = SO4_mol *1000,
   `Alk Acid (mmol/l)` = Alk_Acid_mol *1000,
   `Organic charge (meq/l)` = org_charge*1000, 
-  `Sum of Cations (meq/l)` = Sum.of.cations*1000
+  `Sum of Cations (meq/l)` = Sum.of.cations*1000,
+  `Org. Charge Density (-meq/g of C)` = - org_charge_density_meq_g_C,
   )%>% select(-c(
     SO4_mol, Alk_Acid_mol, org_charge, Sum.of.cations, sample_id
     )) %>% rename(
       `TOC (mg/l)` = TOC_mg_l,
-      `Org. Charge Density (meq/g of C)` = org_charge_density_meq_g_C,
       `EC (mS/m)` = EC_mS_m,
       `charge difference (%)` = charge_diff,
       `Absorbance 420mm` = Abs_F420_5cm, 
@@ -1418,12 +1568,12 @@ data_with_weights %>% mutate(
       `Organic acid contribution (%)` = organic_acids
     ) -> data_with_weights_1
 
-variables = c('TOC (mg/l)', 'sVISa', 'Alk Acid (mmol/l)', 'Organic charge (meq/l)', 'Org. Charge Density (meq/g of C)', "charge difference (%)", 'SO4 (mmol/l)', 'EC (mS/m)', 'Absorbance 420mm', 'Field pH',"Sum of Cations (meq/l)", "Al total (µmol/l)", "Si (mmol/l)", "Cl (mmol/l)" , "F (µmol/l)",                                "NO weak acid contibution (%)",
+variables = c('TOC (mg/l)', 'sVISa', 'Alk Acid (mmol/l)', 'Organic charge (meq/l)', 'Org. Charge Density (-meq/g of C)', "charge difference (%)", 'SO4 (mmol/l)', 'EC (mS/m)', 'Absorbance 420mm', 'Field pH',"Sum of Cations (meq/l)", "Al total (µmol/l)", "Si (mmol/l)", "Cl (mmol/l)" , "F (µmol/l)",                                "NO weak acid contibution (%)",
                                  "Strong acid contibution (%)",
                                   "Organic acid contribution (%)"  )
 
 
-variables_in = c('TOC (mg/l)', 'sVISa', 'Alk Acid (mmol/l)', 'Organic charge (meq/l)', 'Org. Charge Density (meq/g of C)', "charge difference (%)", 'SO4 (mmol/l)', 'EC (mS/m)', 'Absorbance 420mm', 'Field pH',"Sum of Cations (meq/l)", "Al total (µmol/l)", "Si (mmol/l)", "Cl (mmol/l)" , "F (µmol/l)" )
+variables_in = c('TOC (mg/l)', 'sVISa', 'Alk Acid (mmol/l)', 'Organic charge (meq/l)', 'Org. Charge Density (-meq/g of C)', "charge difference (%)", 'SO4 (mmol/l)', 'EC (mS/m)', 'Absorbance 420mm', 'Field pH',"Sum of Cations (meq/l)", "Al total (µmol/l)", "Si (mmol/l)", "Cl (mmol/l)" , "F (µmol/l)" )
 
 # Ensure all relevant columns are numeric
 data_with_weights_1 <- data_with_weights_1 %>%
@@ -1438,7 +1588,7 @@ long_data <- data_with_weights_1 %>%
                                 "sVISa",
                                 "Absorbance 420mm", 
                                 "Organic charge (meq/l)", 
-                                "Org. Charge Density (meq/g of C)",
+                                "Org. Charge Density (-meq/g of C)",
                                 "charge difference (%)",
                                 "Alk Acid (mmol/l)",
                                 "SO4 (mmol/l)", 
@@ -1471,7 +1621,7 @@ facet_labels <- c(
   `sVISa` = "b) sVISa",
   `Absorbance 420mm` = "c) Absorbance 420mm",
   `Organic charge (meq/l)` = "d) Organic charge (meq/l)",
-  `Org. Charge Density (meq/g of C)` = "e) Org. Charge Density (meq/g of C)",
+  `Org. Charge Density (meq/g of C)` = "e) Org. Charge Density (-meq/g of C)",
   `charge difference (%)` = "f) charge diff. (%)",
   `Alk Acid (mmol/l)` = "g) Alk Acid (mmol/l)",
   `SO4 (mmol/l)` = "h) SO4 (mmol/l)",
@@ -1499,12 +1649,12 @@ ggplot(weighted_summary, aes(x = period, y = Median, fill = period)) +
 
 ```{r}
 #| label: fig-bar-acid-contribution
-#| fig-cap: Bargraphs of the contribution of non-organic weak acids (a), strong acids (b) and organic acids (c) for the three periods, for all stations weighted by the number of samples in each station. Calculated as the percentage of the total negative charge.
+#| fig-cap: Bargraphs of the contribution of non-organic weak acids (a), strong acids (b) and organic acids (c) and organic charge density (d) for the three periods, for all stations weighted by the number of samples in each station. Calculated as the percentage of the total negative charge.
 #| fig-height: 4
 #| fig-width: 8
 
 # Filter the data for the last three variables
-last_three_variables <- c("NO weak acid contibution (%)", "Strong acid contibution (%)", "Organic acid contribution (%)")
+last_three_variables <- c("NO weak acid contibution (%)", "Strong acid contibution (%)", "Organic acid contribution (%)", "Org. Charge Density (-meq/g of C)")
 
 # Calculate weighted summary statistics for the last three variables
 weighted_summary_last_three <- long_data %>%
@@ -1518,22 +1668,80 @@ weighted_summary_last_three <- long_data %>%
   )
 
 facet_labels_last_three <- c(
-  `NO weak acid contibution (%)`= "a) NO weak acid (%)",
-  `Strong acid contibution (%)`= "b) Strong acids (%)",
-  `Organic acid contribution (%)` = "c) Organic acids (%)"
+  `NO weak acid contibution (%)`= "b) NO weak acid (%)",
+  `Strong acid contibution (%)`= "c) Strong acids (%)",
+  `Organic acid contribution (%)` = "d) Organic acids (%)",
+  `Org. Charge Density (-meq/g of C)` = "a) Org. Charge Density (-meq/g of C)"
 )
 
 # Create the plot with facets for the last three variables
-ggplot(weighted_summary_last_three, aes(x = period, y = Median, fill = period)) +
+p1 <- ggplot(weighted_summary_last_three %>% filter(variable  == "Org. Charge Density (-meq/g of C)"), aes(x = period, y = Median, fill = period)) +
   geom_bar(stat = "identity") +
   geom_errorbar(aes(ymin = Q25, ymax = Q75), width = 0.2) +
-  labs(y = "Median Value", x = "Period") +
+  labs(y = "OMCD (-meq/g of C)", x = "Period") +
   theme_minimal() +
   theme(legend.position = "none",
    strip.text = element_text(hjust = 0)) +
-  facet_wrap(~ variable, scales = "fixed", ncol = 3, labeller = labeller(variable = facet_labels_last_three) ) +
+  # facet_wrap(~ variable, scales = "fixed", ncol = 2, labeller = labeller(variable = facet_labels_last_three) ) +
   scale_fill_brewer(palette = "Set2") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+    theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(), panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) + ylim(0,10)
+
+p2 <- ggplot(weighted_summary_last_three %>% filter(variable  == "Organic acid contribution (%)"), aes(x = period, y = Median, fill = period)) +
+  geom_bar(stat = "identity") +
+  geom_errorbar(aes(ymin = Q25, ymax = Q75), width = 0.2) +
+  labs(y = "% contribution", x = "Period") +
+  theme_minimal() +
+  theme(legend.position = "none",
+   strip.text = element_text(hjust = 0)) +
+  # facet_wrap(~ variable, scales = "fixed", ncol = 2, labeller = labeller(variable = facet_labels_last_three) ) +
+  scale_fill_brewer(palette = "Set2") +
+  ylim(0, 70)+
+    theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(), panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))
+
+
+p3 <- ggplot(weighted_summary_last_three %>% filter(variable  == "NO weak acid contibution (%)"), aes(x = period, y = Median, fill = period)) +
+  geom_bar(stat = "identity") +
+  geom_errorbar(aes(ymin = Q25, ymax = Q75), width = 0.2) +
+  labs(y = "% contribution", x = "Period") +
+  theme_minimal() +
+  theme(legend.position = "none",
+   strip.text = element_text(hjust = 0)) +
+  # facet_wrap(~ variable, scales = "fixed", ncol = 2, labeller = labeller(variable = facet_labels_last_three) ) +
+  scale_fill_brewer(palette = "Set2") +
+  ylim(0, 70)+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+theme(axis.title.x=element_blank(),
+        axis.ticks.x=element_blank(), panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))
+  
+
+p4 <- ggplot(weighted_summary_last_three %>% filter(variable  == "Strong acid contibution (%)"), aes(x = period, y = Median, fill = period)) +
+  geom_bar(stat = "identity") +
+  geom_errorbar(aes(ymin = Q25, ymax = Q75), width = 0.2) +
+  labs(y = "", x = "Period") +
+  theme_minimal() +
+  theme(legend.position = "none",
+   strip.text = element_text(hjust = 0)) +
+  # facet_wrap(~ variable, scales = "fixed", ncol = 2, labeller = labeller(variable = facet_labels_last_three) ) +
+  scale_fill_brewer(palette = "Set2") +
+  ylim(0, 70)+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))+
+  theme(axis.title.x=element_blank(),
+        axis.ticks.x=element_blank(), panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))
+
+library(cowplot)
+
+plot_grid(p1, p2, p3, p4, labels = c('   a. OMCD', 'b. Organic acids', 'c. NO weak acids', 'd. Strong acids'), label_fontface = "plain", align = "hv", label_y = 1, label_x = 0) %>%  ggsave(file = "figures/acid_contribution.png", width = 35,
+  height = 20,
+  units = "cm",
+  dpi = 300)
+
 ```
 
 
@@ -1588,6 +1796,237 @@ summary_stats_complete %>%
 
 ---
 
+### adom_doc
+
+```{r}
+
+#| fig.cap: "Kruskal Wallis with confidence interval of 95% to find number of stations with significant differences bettwen the periods. "
+#| label: fig-sig-adom_doc
+#| out.width: 60%
+
+summary_stats <- data_periods %>% arrange(sampling_date) %>%
+  group_by(mvm_id, period) %>%
+  summarise(
+    median= median(adom_doc, na.rm = TRUE),
+    iqr = IQR(adom_doc, na.rm = TRUE),  # Interquartile Range
+    n = n()  # Count of observations per group
+  ) %>%
+  ungroup()
+
+
+# Step 3: Reshape the data to have periods as columns
+summary_table <- summary_stats %>%
+  pivot_wider(
+    names_from = period,
+    values_from = c(median, iqr, n)
+  )
+
+# Step 4: Filter data for Kruskal-Wallis testing
+# Ensure each group (mvm_id) has more than one period and non-identical adom_doc values across periods
+testable_data <- data_periods %>% arrange(sampling_date) %>%
+  group_by(mvm_id) %>%
+  filter(n_distinct(period) > 1) %>%  # At least two periods
+  filter(n_distinct(adom_doc[!is.na(adom_doc)]) > 2) %>%  # At least two unique adom_doc values
+  summarise(kruskal_p_value = tryCatch({
+    kruskal.test(adom_doc ~ period)$p.value  # Run Kruskal-Wallis only if conditions met
+  }, error = function(e) {
+    message("Error in Kruskal-Wallis test for mvm_id ", unique(mvm_id), ": ", e$message)
+    NA
+  }))
+  # Return NA if test fails
+
+# Step 5: Merge the significance results with the summary table
+final_table <- left_join(summary_table, testable_data, by = "mvm_id")
+
+# View the final table with significance results
+# kable(final_table)
+
+# Create a summary table that counts the number of mvm_ids with significant and non-significant differences:
+summary_significance_s <- final_table %>%
+  mutate(significant = case_when (kruskal_p_value < 0.05 ~ "Significant", kruskal_p_value >= 0.05 ~"Not Significant", 
+  TRUE ~ "No Data")) %>% as_tibble() %>%
+  dplyr::count(significant)
+
+
+# You can create a bar plot to visualize the proportion of mvm_id with significant vs. non-significant differences:
+
+ggplot(summary_significance_s, aes(x = significant, y = n)) +
+  geom_bar(stat = "identity", fill  = "grey", colour = "grey") +
+  geom_text(aes(label = n), vjust = -0.5) +
+  theme_bw() +
+  labs(title = "",
+       x = "", y = "")  +
+  theme(axis.title.x=element_blank(),
+        axis.ticks.x=element_blank(), panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) + ylim(0,87)-> p1
+
+p1
+```
+```{r}
+#| cache-refresh: true
+#| label: tbl-adom_doc-significance
+#| tbl-cap: adom_doc significance using Kruskal Wallis to determine significance and then Dunn's test as a post hoc test to find the significant differences.
+
+library(FSA)
+
+# Perform pairwise Dunn's test for each mvm_id
+# Ensure period is a factor
+
+data_periods <- data_periods %>%
+  mutate(period = as.factor(period))
+
+mvm_ids_sig <- final_table %>% filter((kruskal_p_value < 0.05)) %>% select(mvm_id)
+# Perform Dunn's test for each mvm_id
+pairwise_results <- data_periods %>%
+  arrange(sampling_date) %>%
+  filter(mvm_id %in% mvm_ids_sig$mvm_id) %>%
+  group_by(mvm_id) %>%
+  filter(n_distinct(period) > 1) %>%
+  group_modify(~ {
+    tryCatch(
+      data.frame(
+        dunn_test = list(as.data.frame(dunnTest(adom_doc ~ period, data = .x, method = "bonferroni")$res))
+      ),
+      error = function(e) data.frame(dunn_test_summary = list(NULL))  # Handle errors
+    )
+  }) %>%
+  ungroup()
+
+
+# View the result
+# pairwise_results %>% filter(dunn_test.P.adj < 0.05)
+
+summary_dunns <- pairwise_results %>% group_by(dunn_test.Comparison) %>%
+  mutate(significant = ifelse(dunn_test.P.adj < 0.05, "Significant", "Not Significant")) %>%
+  dplyr::count(significant) %>% ungroup() %>%
+  pivot_wider(
+    names_from = significant,  # Create columns based on the 'significant' values
+    values_from = n,           # Populate these columns with values from 'n'
+    values_fill = 0            # Fill missing values with 0
+  )
+
+kable(summary_dunns)
+```
+
+```{r}
+# Calculate the percentage changes for each comparison
+percentage_changes <- summary_table %>%
+  pivot_longer(cols = starts_with("median_"), names_to = "period", values_to = "median") %>%
+  mutate(period = str_remove(period, "median_")) %>%
+  pivot_wider(names_from = period, values_from = median) %>%
+  mutate(
+    `1990-1997 - 1998-2011` = (`1998-2011` - `1990-1997`) / `1990-1997` * 100,
+    `1990-1997 - 2012-2024` = (`2012-2024` - `1990-1997`) / `1990-1997` * 100,
+    `1998-2011 - 2012-2024` = (`2012-2024` - `1998-2011`) / `1998-2011` * 100
+  ) %>%
+  select(mvm_id, `1990-1997 - 1998-2011`, `1990-1997 - 2012-2024`, `1998-2011 - 2012-2024`) %>%
+  pivot_longer(cols = -mvm_id, names_to = "dunn_test.Comparison", values_to = "MedianChange")
+
+  # Merge the percentage changes with the pairwise results
+pairwise_results <- pairwise_results %>%
+  left_join(percentage_changes, by = c("mvm_id", "dunn_test.Comparison"))
+```
+
+```{r}
+#| fig.cap: adom_doc changes between periods. Only stations for which Kruskall-Wallis test found a significant difference between periods are included. In the tile is indicated how many station out of all the stations that had significant results between the periods had data for a comparison during the specified periods.
+#| label: fig-bar-adom_doc
+#| fig-width: 8
+#| fig-height: 8
+
+library(forcats)
+pairwise_results %>% mutate(significance = case_when(
+    dunn_test.P.adj >= 0.05~ "not sig", 
+    dunn_test.P.adj < 0.05 & MedianChange > 0 & MedianChange < 5 ~ "sig increase < 5%",
+    dunn_test.P.adj < 0.05 & MedianChange > 5 ~ "sig increase > 5%",
+    dunn_test.P.adj < 0.05 & MedianChange < 0 & MedianChange > -5 ~ "sig decrease < 5%",
+    dunn_test.P.adj < 0.05 & MedianChange < -5 ~ "sig decrease > 5%")) %>%
+  complete(mvm_id, dunn_test.Comparison, fill = list(significance = "no data")) %>% left_join(stations %>% select(mvm_id, stationCoordinateY)) %>% 
+  mutate(mvm_id = fct_reorder(as.factor(mvm_id), stationCoordinateY)) %>% 
+  mutate(dunn_test.Comparison = str_replace(dunn_test.Comparison, " - ", "\n")) %>% 
+  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997\n1998-2011", "1998-2011\n2012-2024", "1990-1997\n2012-2024")) -> pairwise_results_1
+
+
+ggplot(pairwise_results_1, aes(x = as.factor(mvm_id), fill = significance)) +
+  geom_bar(position = "fill") +
+  facet_wrap(~ dunn_test.Comparison) +
+  labs(x = "Station (mvm_id)", y = "Proportion", fill = "Significance") +
+  theme_minimal() +
+  scale_fill_manual(values = c("sig increase < 5%" = "#E69F00", "sig decrease < 5%" = "#56B4E9", "not sig" = "#F0E442", "no data" = 'white',"sig increase > 5%" = "#D55E00", "sig decrease > 5%" = "#0072B2" )) +
+  coord_flip() +
+  ylab("Dunn's test")+
+  xlab("Stations")+
+    theme(axis.ticks.x = element_blank(), axis.text.x = element_blank(), axis.text = element_text(size = 4.5))
+
+```
+
+```{r}
+#| tab-cap: Information on how many stations had data for each period for adom_doc.
+#| label: table-significance-adom_doc
+library(dplyr)
+
+# Calculate the total number of stations for each period
+total_stations_per_period <- pairwise_results_1 %>%
+  group_by(dunn_test.Comparison) %>%
+  summarise(total_stations = n_distinct(mvm_id))
+
+# Calculate the number of stations for each significance category within each period
+stations_with_data <- pairwise_results_1 %>%
+  group_by(dunn_test.Comparison, significance) %>%
+  summarise(num_stations = n_distinct(mvm_id)) %>%
+  ungroup()
+
+# Combine the summaries into a single data frame
+summary_stations <- stations_with_data %>%
+  left_join(total_stations_per_period, by = "dunn_test.Comparison") %>%
+  pivot_wider(names_from = significance, values_from = num_stations, values_fill = list(num_stations = 0)) 
+  # %>%
+  # rename(
+  #   `Total Stations` = total_stations,
+  #   `Significant Increase` = sig_increase,
+  #   `Significant Decrease` = sig_decrease,
+  #   `Not Significant` = not_sig,
+  #   `No data` = `no data`
+  # )
+
+# Print the summary data frame
+kable(summary_stations)
+
+```
+
+```{r}
+#| fig.cap: adom_doc of all stations not weighted.
+#| fig.subcap:
+#|      - "Median"
+#|      - "IQR"
+#| layout-ncol: 2
+#| label: fig-box-adom_doc
+#| 
+ggplot(summary_stats, aes(x = period, y = median, fill = period)) +
+  geom_boxplot() +
+  # geom_text(aes(
+  #   x = period,
+  #   y = max(median, na.rm = TRUE) + 0.002,  # Adjust text position
+  #   label = paste0("sig n: ", sig_n, "\ninsig n: ", insig_n)
+  # ), color = "black", size = 4, position = position_dodge(width = 0.9)) +
+  labs(x = "Period", y = "Median adom_doc") +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+ggplot(summary_stats, aes(x = period, y = iqr, fill = period)) +
+  geom_boxplot() +
+  # geom_text(aes(
+  #   x = period,
+  #   y = max(median, na.rm = TRUE) + 0.002,  # Adjust text position
+  #   label = paste0("sig n: ", sig_n, "\ninsig n: ", insig_n)
+  # ), color = "black", size = 4, position = position_dodge(width = 0.9)) +
+  labs(x = "Period", y = "IQR adom_doc") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+---
+
+
 ### sVISa
 
 ```{r}
@@ -1634,7 +2073,7 @@ final_table <- left_join(summary_table, testable_data, by = "mvm_id")
 # kable(final_table)
 
 # Create a summary table that counts the number of mvm_ids with significant and non-significant differences:
-summary_significance <- final_table %>%
+summary_significance_s <- final_table %>%
   mutate(significant = case_when (kruskal_p_value < 0.05 ~ "Significant", kruskal_p_value >= 0.05 ~"Not Significant", 
   TRUE ~ "No Data")) %>% as_tibble() %>%
   dplyr::count(significant)
@@ -1642,13 +2081,17 @@ summary_significance <- final_table %>%
 
 # You can create a bar plot to visualize the proportion of mvm_id with significant vs. non-significant differences:
 
-ggplot(summary_significance, aes(x = significant, y = n, fill = significant)) +
-  geom_bar(stat = "identity") +
+ggplot(summary_significance_s, aes(x = significant, y = n)) +
+  geom_bar(stat = "identity", fill  = "grey", colour = "grey") +
   geom_text(aes(label = n), vjust = -0.5) +
+  theme_bw() +
   labs(title = "",
-       x = "Significance", y = "Number of Stations") +
-  theme_minimal() +
-  scale_fill_brewer(palette = "Set2")
+       x = "", y = "")  +
+  theme(axis.title.x=element_blank(),
+        axis.ticks.x=element_blank(), panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) + ylim(0,87)-> p1
+
+p1
 ```
 ```{r}
 #| cache-refresh: true
@@ -1703,11 +2146,11 @@ percentage_changes <- summary_table %>%
   mutate(period = str_remove(period, "median_")) %>%
   pivot_wider(names_from = period, values_from = median) %>%
   mutate(
-    `1990-1997 - 1998-2012` = (`1998-2012` - `1990-1997`) / `1990-1997` * 100,
+    `1990-1997 - 1998-2011` = (`1998-2011` - `1990-1997`) / `1990-1997` * 100,
     `1990-1997 - 2012-2024` = (`2012-2024` - `1990-1997`) / `1990-1997` * 100,
-    `1998-2012 - 2012-2024` = (`2012-2024` - `1998-2012`) / `1998-2012` * 100
+    `1998-2011 - 2012-2024` = (`2012-2024` - `1998-2011`) / `1998-2011` * 100
   ) %>%
-  select(mvm_id, `1990-1997 - 1998-2012`, `1990-1997 - 2012-2024`, `1998-2012 - 2012-2024`) %>%
+  select(mvm_id, `1990-1997 - 1998-2011`, `1990-1997 - 2012-2024`, `1998-2011 - 2012-2024`) %>%
   pivot_longer(cols = -mvm_id, names_to = "dunn_test.Comparison", values_to = "MedianChange")
 
   # Merge the percentage changes with the pairwise results
@@ -1731,7 +2174,7 @@ pairwise_results %>% mutate(significance = case_when(
   complete(mvm_id, dunn_test.Comparison, fill = list(significance = "no data")) %>% left_join(stations %>% select(mvm_id, stationCoordinateY)) %>% 
   mutate(mvm_id = fct_reorder(as.factor(mvm_id), stationCoordinateY)) %>% 
   mutate(dunn_test.Comparison = str_replace(dunn_test.Comparison, " - ", "\n")) %>% 
-  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997\n1998-2012", "1998-2012\n2012-2024", "1990-1997\n2012-2024")) -> pairwise_results_1
+  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997\n1998-2011", "1998-2011\n2012-2024", "1990-1997\n2012-2024")) -> pairwise_results_1
 
 
 ggplot(pairwise_results_1, aes(x = as.factor(mvm_id), fill = significance)) +
@@ -1858,7 +2301,7 @@ final_table <- left_join(summary_table, testable_data, by = "mvm_id")
 # kable(final_table)
 
 # Create a summary table that counts the number of mvm_ids with significant and non-significant differences:
-summary_significance <- final_table %>%
+summary_significance_TOC <- final_table %>%
   mutate(significant = case_when (kruskal_p_value < 0.05 ~ "Significant", kruskal_p_value >= 0.05 ~"Not Significant", 
   TRUE ~ "No Data")) %>% as_tibble() %>%
   dplyr::count(significant)
@@ -1866,12 +2309,16 @@ summary_significance <- final_table %>%
 
 # You can create a bar plot to visualize the proportion of mvm_id with significant vs. non-significant differences:
 
-ggplot(summary_significance, aes(x = significant, y = n, fill = significant)) +
-  geom_bar(stat = "identity") +
+ggplot(summary_significance_TOC, aes(x = significant, y = n)) +
+  geom_bar(stat = "identity", fill  = "grey", colour = "grey") +
   geom_text(aes(label = n), vjust = -0.5) +
-  labs(title = "Significance of Differences Across Periods for Each Station",
-       x = "Significance", y = "Number of Stations") +
-  theme_minimal()
+  theme_bw() +
+  labs(title = "",
+       x = "", y = "Number of Stations")  +
+  theme(axis.title.x=element_blank(),
+        axis.ticks.x=element_blank(), panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))  + ylim(0,87) -> p2
+p2
 ```
 ```{r}
 #| cache-refresh: true
@@ -1927,11 +2374,11 @@ percentage_changes <- summary_table %>%
   mutate(period = str_remove(period, "median_")) %>%
   pivot_wider(names_from = period, values_from = median) %>%
   mutate(
-    `1990-1997 - 1998-2012` = (`1998-2012` - `1990-1997`) / `1990-1997` * 100,
+    `1990-1997 - 1998-2011` = (`1998-2011` - `1990-1997`) / `1990-1997` * 100,
     `1990-1997 - 2012-2024` = (`2012-2024` - `1990-1997`) / `1990-1997` * 100,
-    `1998-2012 - 2012-2024` = (`2012-2024` - `1998-2012`) / `1998-2012` * 100
+    `1998-2011 - 2012-2024` = (`2012-2024` - `1998-2011`) / `1998-2011` * 100
   ) %>%
-  select(mvm_id, `1990-1997 - 1998-2012`, `1990-1997 - 2012-2024`, `1998-2012 - 2012-2024`) %>%
+  select(mvm_id, `1990-1997 - 1998-2011`, `1990-1997 - 2012-2024`, `1998-2011 - 2012-2024`) %>%
   pivot_longer(cols = -mvm_id, names_to = "dunn_test.Comparison", values_to = "MedianChange")
 
   # Merge the percentage changes with the pairwise results
@@ -1955,7 +2402,7 @@ pairwise_results %>% mutate(significance = case_when(
   complete(mvm_id, dunn_test.Comparison, fill = list(significance = "no data")) %>% left_join(stations %>% select(mvm_id, stationCoordinateY)) %>% 
   mutate(mvm_id = fct_reorder(as.factor(mvm_id), stationCoordinateY)) %>% 
   mutate(dunn_test.Comparison = str_replace(dunn_test.Comparison, " - ", "\n")) %>% 
-  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997\n1998-2012", "1998-2012\n2012-2024", "1990-1997\n2012-2024")) -> pairwise_results_1
+  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997\n1998-2011", "1998-2011\n2012-2024", "1990-1997\n2012-2024")) -> pairwise_results_1
 
 
 ggplot(pairwise_results_1, aes(x = as.factor(mvm_id), fill = significance)) +
@@ -2084,7 +2531,7 @@ final_table <- left_join(summary_table, testable_data, by = "mvm_id")
 # kable(final_table)
 
 # Create a summary table that counts the number of mvm_ids with significant and non-significant differences:
-summary_significance <- final_table %>%
+summary_significance_ocd <- final_table %>%
   mutate(significant = case_when (kruskal_p_value < 0.05 ~ "Significant", kruskal_p_value >= 0.05 ~"Not Significant", 
   TRUE ~ "No Data")) %>% as_tibble() %>%
   dplyr::count(significant)
@@ -2092,12 +2539,16 @@ summary_significance <- final_table %>%
 
 # You can create a bar plot to visualize the proportion of mvm_id with significant vs. non-significant differences:
 
-ggplot(summary_significance, aes(x = significant, y = n, fill = significant)) +
-  geom_bar(stat = "identity") +
+ggplot(summary_significance_ocd, aes(x = significant, y = n)) +
+  geom_bar(stat = "identity", fill  = "grey", colour = "grey") +
   geom_text(aes(label = n), vjust = -0.5) +
-  labs(title = "Significance of Differences Across Periods for Each Station",
-       x = "Significance", y = "Number of Stations") +
-  theme_minimal()
+  theme_bw() +
+  labs(title = "",
+       x = "", y = "")  +
+  theme(axis.title.x=element_blank(),
+        axis.ticks.x=element_blank(), panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))  + ylim(0,87) -> p3
+p3
 ```
 ```{r}
 #| cache-refresh: true
@@ -2143,6 +2594,7 @@ summary_dunns <- pairwise_results %>% group_by(dunn_test.Comparison) %>%
   )
 
 kable(summary_dunns)
+summary_dunns
 ```
 
 ```{r}
@@ -2153,11 +2605,11 @@ percentage_changes <- summary_table %>%
   mutate(period = str_remove(period, "median_")) %>%
   pivot_wider(names_from = period, values_from = median) %>%
   mutate(
-    `1990-1997 - 1998-2012` = (`1998-2012` - `1990-1997`) / abs(`1990-1997`) * 100,
+    `1990-1997 - 1998-2011` = (`1998-2011` - `1990-1997`) / abs(`1990-1997`) * 100,
     `1990-1997 - 2012-2024` = (`2012-2024` - `1990-1997`) / abs(`1990-1997`) * 100,
-    `1998-2012 - 2012-2024` = (`2012-2024` - `1998-2012`) / abs(`1998-2012`) * 100
+    `1998-2011 - 2012-2024` = (`2012-2024` - `1998-2011`) / abs(`1998-2011`) * 100
   ) %>%
-  select(mvm_id, `1990-1997 - 1998-2012`, `1990-1997 - 2012-2024`, `1998-2012 - 2012-2024`) %>%
+  select(mvm_id, `1990-1997 - 1998-2011`, `1990-1997 - 2012-2024`, `1998-2011 - 2012-2024`) %>%
   pivot_longer(cols = -mvm_id, names_to = "dunn_test.Comparison", values_to = "MedianChange")
 
   # Merge the percentage changes with the pairwise results
@@ -2182,7 +2634,7 @@ pairwise_results %>% mutate(significance = case_when(
   complete(mvm_id, dunn_test.Comparison, fill = list(significance = "no data")) %>% left_join(stations %>% select(mvm_id, stationCoordinateY)) %>% 
   mutate(mvm_id = fct_reorder(as.factor(mvm_id), stationCoordinateY)) %>% 
   mutate(dunn_test.Comparison = str_replace(dunn_test.Comparison, " - ", "\n")) %>% 
-  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997\n1998-2012", "1998-2012\n2012-2024", "1990-1997\n2012-2024")) -> pairwise_results_1
+  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997\n1998-2011", "1998-2011\n2012-2024", "1990-1997\n2012-2024")) -> pairwise_results_1
 
 
 ggplot(pairwise_results_1, aes(x = as.factor(mvm_id), fill = significance)) +
@@ -2246,9 +2698,12 @@ ggplot(summary_stats, aes(x = period, y = median, fill = period)) +
   #   y = max(median, na.rm = TRUE) + 0.002,  # Adjust text position
   #   label = paste0("sig n: ", sig_n, "\ninsig n: ", insig_n)
   # ), color = "black", size = 4, position = position_dodge(width = 0.9)) +
-  labs(x = "Period", y = "Median org_charge_density") +
+  labs(x = "Period", y = "Median OMCD (meq/g of C)") +
   theme_minimal() +
-  theme(legend.position = "none")
+  theme(legend.position = "none")+
+  theme(axis.title.x=element_blank(),
+        axis.ticks.x=element_blank(), panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) -> p_med
 
 ggplot(summary_stats, aes(x = period, y = iqr, fill = period)) +
   geom_boxplot() +
@@ -2257,15 +2712,23 @@ ggplot(summary_stats, aes(x = period, y = iqr, fill = period)) +
   #   y = max(median, na.rm = TRUE) + 0.002,  # Adjust text position
   #   label = paste0("sig n: ", sig_n, "\ninsig n: ", insig_n)
   # ), color = "black", size = 4, position = position_dodge(width = 0.9)) +
-  labs(x = "Period", y = "IQR org_charge_density") +
+  labs(x = "Period", y = "IQR OMCD (meq/g of C)") +
   theme_minimal() +
-  theme(legend.position = "none")
+  theme(legend.position = "none") +
+  theme(axis.title.x=element_blank(),
+        axis.ticks.x=element_blank(), panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) -> p_iqr
+
+plot_grid(p_med, p_iqr,  labels = c('a', 'b'), ncol = 2, label_fontface = "plain", align = "hv", label_y = 1, label_x = 0) %>%  ggsave(file = "figures/med_iqr_OMCD.png", width = 30,
+  height = 10,
+  units = "cm",
+  dpi = 300)
 ```
 
 
 ### Weak Acid Contribution
 
-Acids in a water chemistry sample can be split into weak acids and strong acids. The weak acids can be further divided into organic acids and other weak acids. Here we look at how the contribution of these non-organic other weak acids has changed over time for each station. How it has changed for all stations combined can be seen in @fig-bar-acid-contribution.
+<!-- Acids in a water chemistry sample can be split into weak acids and strong acids. The weak acids can be further divided into organic acids and other weak acids. Here we look at how the contribution of these non-organic other weak acids has changed over time for each station. How it has changed for all stations combined can be seen in @fig-bar-acid-contribution. -->
 
 The weak acid contribution is calculated as: 
 
@@ -2332,7 +2795,7 @@ final_table <- left_join(summary_table, testable_data, by = "mvm_id")
 # kable(final_table)
 
 # Create a summary table that counts the number of mvm_ids with significant and non-significant differences:
-summary_significance <- final_table %>%
+summary_significance_wa <- final_table %>%
   mutate(significant = case_when (kruskal_p_value < 0.05 ~ "Significant", kruskal_p_value >= 0.05 ~"Not Significant", 
   TRUE ~ "No Data")) %>% as_tibble() %>%
   dplyr::count(significant)
@@ -2340,13 +2803,16 @@ summary_significance <- final_table %>%
 
 # You can create a bar plot to visualize the proportion of mvm_id with significant vs. non-significant differences:
 
-ggplot(summary_significance, aes(x = significant, y = n, fill = significant)) +
-  geom_bar(stat = "identity") +
+ggplot(summary_significance_wa, aes(x = significant, y = n)) +
+  geom_bar(stat = "identity", fill  = "grey", colour = "grey") +
   geom_text(aes(label = n), vjust = -0.5) +
+  theme_bw() +
   labs(title = "",
-       x = "Significance", y = "Number of Stations") +
-  theme_minimal() +
-  scale_fill_brewer(palette = "Set2")
+       x = "", y = "")  +
+  theme(axis.title.x=element_blank(),
+        axis.ticks.x=element_blank(), panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black"))  + ylim(0,87) -> p4
+p4
 ```
 
 
@@ -2405,11 +2871,11 @@ percentage_changes <- summary_table %>%
   mutate(period = str_remove(period, "median_")) %>%
   pivot_wider(names_from = period, values_from = median) %>%
   mutate(
-    `1990-1997 - 1998-2012` = (`1998-2012` - `1990-1997`) / `1990-1997` * 100,
+    `1990-1997 - 1998-2011` = (`1998-2011` - `1990-1997`) / `1990-1997` * 100,
     `1990-1997 - 2012-2024` = (`2012-2024` - `1990-1997`) / `1990-1997` * 100,
-    `1998-2012 - 2012-2024` = (`2012-2024` - `1998-2012`) / `1998-2012` * 100
+    `1998-2011 - 2012-2024` = (`2012-2024` - `1998-2011`) / `1998-2011` * 100
   ) %>%
-  select(mvm_id, `1990-1997 - 1998-2012`, `1990-1997 - 2012-2024`, `1998-2012 - 2012-2024`) %>%
+  select(mvm_id, `1990-1997 - 1998-2011`, `1990-1997 - 2012-2024`, `1998-2011 - 2012-2024`) %>%
   pivot_longer(cols = -mvm_id, names_to = "dunn_test.Comparison", values_to = "MedianChange")
 
   # Merge the percentage changes with the pairwise results
@@ -2433,7 +2899,7 @@ pairwise_results %>% mutate(significance = case_when(
   complete(mvm_id, dunn_test.Comparison, fill = list(significance = "no data")) %>% left_join(stations %>% select(mvm_id, stationCoordinateY)) %>% 
   mutate(mvm_id = fct_reorder(as.factor(mvm_id), stationCoordinateY)) %>% 
   mutate(dunn_test.Comparison = str_replace(dunn_test.Comparison, " - ", "\n")) %>% 
-  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997\n1998-2012", "1998-2012\n2012-2024", "1990-1997\n2012-2024")) -> pairwise_results_1
+  mutate(dunn_test.Comparison = fct_relevel(dunn_test.Comparison, "1990-1997\n1998-2011", "1998-2011\n2012-2024", "1990-1997\n2012-2024")) -> pairwise_results_1
 
 
 ggplot(pairwise_results_1, aes(x = as.factor(mvm_id), fill = significance)) +
@@ -2489,17 +2955,6 @@ kable(summary_stations)
 #|      - "IQR"
 #| layout-ncol: 2
 #| label: fig-box-strong_acids
-
-summary_stats <- data_periods  %>%
-  arrange(sampling_date) %>%
-  group_by(mvm_id, period) %>%
-  summarise(
-    median= median(weak_acids, na.rm = TRUE),
-    iqr = IQR(weak_acids, na.rm = TRUE),  # Interquartile Range
-    n = n()  # Count of observations per group
-  ) %>%
-  ungroup()
-
 ggplot(summary_stats, aes(x = period, y = median, fill = period)) +
   geom_boxplot() +
   # geom_text(aes(
@@ -2507,9 +2962,12 @@ ggplot(summary_stats, aes(x = period, y = median, fill = period)) +
   #   y = max(median, na.rm = TRUE) + 0.002,  # Adjust text position
   #   label = paste0("sig n: ", sig_n, "\ninsig n: ", insig_n)
   # ), color = "black", size = 4, position = position_dodge(width = 0.9)) +
-  labs(x = "Period", y = "Median contribution weak_acids") +
+  labs(x = "Period", y = "NO weak acids (%)") +
   theme_minimal() +
-  theme(legend.position = "none")
+  theme(legend.position = "none")+
+  theme(axis.title.x=element_blank(),
+        axis.ticks.x=element_blank(), panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) -> p_med
 
 ggplot(summary_stats, aes(x = period, y = iqr, fill = period)) +
   geom_boxplot() +
@@ -2518,12 +2976,19 @@ ggplot(summary_stats, aes(x = period, y = iqr, fill = period)) +
   #   y = max(median, na.rm = TRUE) + 0.002,  # Adjust text position
   #   label = paste0("sig n: ", sig_n, "\ninsig n: ", insig_n)
   # ), color = "black", size = 4, position = position_dodge(width = 0.9)) +
-  labs(x = "Period", y = "IQR weak_acids") +
+  labs(x = "Period", y = "NO weak acids (%)") +
   theme_minimal() +
-  theme(legend.position = "none")
+  theme(legend.position = "none") +
+  theme(axis.title.x=element_blank(),
+        axis.ticks.x=element_blank(), panel.border = element_blank(), panel.grid.major = element_blank(),
+panel.grid.minor = element_blank(), axis.line = element_line(colour = "black")) -> p_iqr
+
+plot_grid(p_med, p_iqr,  labels = c('a', 'b'), ncol = 2, label_fontface = "plain", align = "hv", label_y = 1, label_x = 0) %>%  ggsave(file = "figures/med_iqr_WA.png", width = 30,
+  height = 10,
+  units = "cm",
+  dpi = 300)
 ```
 
-### Strong Acid contribution
 
 ```{r}
 #| fig.cap: Contribution of weak acids to charge of all stations not weighted.
@@ -2554,6 +3019,18 @@ ggplot(summary_stats, aes(x = period, y = iqr, fill = period)) +
   labs(x = "Period", y = "IQR weak_acids") +
   theme_minimal() +
   theme(legend.position = "none")
+```
+
+```{r}
+plot_grid(p2, p1, p3, p4, labels = c('    a. TOC', '     b. sVISa', '    c. OMCD', 'd. NO weak acids'), label_fontface = "plain", align = "hv", label_y = 1, label_x = 0) %>%  ggsave(file = "figures/significants.png", width = 35,
+  height = 20,
+  units = "cm",
+  dpi = 300)
+
+plot_grid(p2, p1, p3,  labels = c('a. TOC', 'b. sVISa', 'c. OMCD'), ncol = 3, label_fontface = "plain", align = "hv", label_y = 1, label_x = 0) %>%  ggsave(file = "figures/significants_3.png", width = 30,
+  height = 10,
+  units = "cm",
+  dpi = 300)
 ```
 
 ---
@@ -2691,7 +3168,7 @@ plot_loading_ggplot <- function(opls_model, response_label = "TOC", vip.threshol
 
 library(tibble)
 source("../src/sourcecode.R")
-plot_loading_ggplot(opls_model = opls.model, response_label = "Org. charge density", vip.threshold = 1.0, text_size = 10)
+plot_loading_ggplot(opls_model = opls.model, response_label = "OMCD", vip.threshold = 1.0, text_size = 10)
 
 ```
 

@@ -13,5 +13,5 @@ data <- lapply(charge_diff_input, read.csv) %>%
         bind_rows() %>%
         left_join(chemistry, by = c("sample_id", "mvm_id"))
 
-data %>% rename( org_charge= "Z..6..aq.") %>% mutate(org_charge_eq_mg_C = org_charge/(TOC_mol*12.01*1000)) -> data_renamed # equivalance of charge per liter of solution
+data %>% rename( org_charge = "Z..6..aq.") %>% mutate(org_charge_eq_mg_C = org_charge/(TOC_mol*12.01*1000)) -> data_renamed # equivalance of charge per liter of solution
 write.csv(data_renamed, "results/chemistry/complete.csv", row.names = FALSE)
