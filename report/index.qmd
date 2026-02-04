@@ -44,7 +44,7 @@ In [Eklöf et al, 2020](https://www.sciencedirect.com/science/article/pii/S00431
 
 ```{r}
 library(tidyverse)
-
+setwd("/home/anna/repos/dissociation/report")
 source("../src/sourcecode_screening2024.R")
 
 coordinates <- read.csv("../input/catchment_characteristics/catch_landuse(NMD).csv") %>% select(mvm_id, stationName, stationCoordinateX, stationCoordinateY) %>% rename(x = stationCoordinateX, y = stationCoordinateY)
@@ -246,6 +246,57 @@ knitr::include_graphics(path = c("figures/sVISa_proportion.png","figures/sVISa_p
 knitr::include_graphics(path = c("figures/sVISa_lasange.png","figures/sVISa_lasange_selected.png" ), error = FALSE)
 ```
 
+### Abs
+
+```{r}
+#| include: false
+if (re.read == 're read'){
+df_selected %>%  filter(!is.na(Abs_F420_5cm)) %>% # create sVISa and filter any variables where it does not exist
+  group_by(mvm_id) %>%  # group by mvm_id to remocve andy station where we don't have enough data points
+  filter(n() >= 50) %>%  
+  ungroup() %>%
+     select(mvm_id, Abs_F420_5cm, sampling_date,x, stationName) %>% mutate(SiteID = as.factor(mvm_id))%>% pivot_longer(cols=c("Abs_F420_5cm")) %>% 
+    screeningmodeling(values=value,
+                    datevar = sampling_date, 
+                    link = "identity", 
+                    conf.type = "conf",
+                    conf.level=0.95,
+                    beep = FALSE, 
+                    tdist = FALSE,
+                    autocor = TRUE,
+                    mvm_id,
+                    x,
+                    stationName, name) ->
+  trendplotdata_selected_Abs_F420_5cm
+  trendplotdata_selected_Abs_F420_5cm %>% left_join(coordinates) %>% saveRDS(., file = "../data/trendplotdata_selected_Abs_F420_5cm.rds")
+}  else if (re.read == 're load') {
+  trendplotdata_selected_abs <- tryCatch({
+    readRDS(file = "data/trendplotdata_selected_Abs_F420_5cm.rds")
+  }, error = function(e) {
+    message("An error occurred while reading the RDS file: ", e$message)
+    NULL # Return NULL or an alternative value to handle the error gracefully
+  })
+}
+```
+
+```{r}
+#| include: false
+# Trend plot for Abs_F420_5cm
+
+if (re.read != 're fig' & exists("trendplotdata_selected_Abs_F420_5cm")){
+  fig <- trendplotdata_selected_Abs_F420_5cm %>%plot_proportions()+ ggtitle("Abs_420") + 
+        theme(text=element_text(size=5), #change font size of all text
+        axis.text=element_text(size=5), #change font size of axis text
+        axis.title=element_text(size=6), #change font size of axis titles
+        plot.title=element_text(size=6.5), #change font size of plot title
+        legend.text=element_text(size=6), #change font size of legend text
+        legend.title=element_text(size=5)) 
+  fig %>% ggsave(file = "figures/Abs_F420_5cm_proportion_selected.png", width = 10,
+  height = 6,
+  units = "cm",
+  dpi = 300) 
+}  
+```
 
 ### TOC
 
@@ -409,6 +460,8 @@ knitr::include_graphics(path = c("figures/TOC_lasange.png","figures/TOC_lasange_
 ```
 
 
+
+
 ### combined 
 
 ```{r}
@@ -527,6 +580,9 @@ ggplot(mvm_counts, aes(x = sample_count)) +
        y = "Frequency") +
   theme_minimal()
 ```
+
+
+
 
 # Visual Minteq
 
@@ -1047,7 +1103,7 @@ data %>% filter(abs(charge_diff) < 0.5) %>% mutate(sVISa = Abs_F420_5cm/(TOC_mol
 data %>% filter(abs(charge_diff) < 0.5) %>% mutate(sVISa = Abs_F420_5cm/(TOC_mol*12.01*1000))  %>% mutate(year = year(sampling_date), TOC_mg_l = TOC_mol*12.01*1000, org_charge_density_meq_g_C = org_charge_eq_mg_C * 1000*1000, `Si (mmol/l)` = Si_mol* 1000, `Cl (mmol/l)` = Cl_mol*1000, `Al total (µmol/l)` = Al_mol * 1000000, `F (µmol/l)` = Fluorid_mol *1000000, `NO3 (mmol/l)` = NO3_N_mol * 1000) %>% select(year,EC_mS_m, sVISa,org_charge_density_meq_g_C,TOC_mg_l,SO4_mol,Alk_Acid_mol, sampling_date, Abs_F420_5cm, mvm_id, adom_doc, charge_diff, org_charge, Sum.of.cations, Sum.of.anions, pH_, Ionic.strength, sample_id,  `Si (mmol/l)`, `Cl (mmol/l)`,`Al total (µmol/l)`,`F (µmol/l)`, `NO3 (mmol/l)`, Fluorid_mol,Na_mol,K_mol, Ca_mol,Fe_mol,SO4_mol,Si_mol, NH4_N_mol,Cl_mol, NO3_N_mol,Fluorid_mol,Na_mol,Mn_mol,Zn_mol,Cu_mol,Mg_mol) -> data_12
 
 
-saveRDS(data_12, file = "../results/r_py/data_1.rds")
+# saveRDS(data_12, file = "../results/r_py/data_1.rds")
 ```
 
 ```{r}
@@ -2487,6 +2543,81 @@ ggplot(summary_stats, aes(x = period, y = iqr, fill = period)) +
 
 ### Organic charge density
 
+#### GAM
+
+
+```{r}
+#| include: false
+
+re.read <- 're read'
+
+if (re.read == 're read'){
+data_12 %>%  
+  filter(!is.na(org_charge_density_meq_g_C)) %>% 
+  mutate(sampling_date = as.Date(sampling_date)) %>% 
+  group_by(mvm_id) %>%
+  filter({
+    # Count samples per year
+    yearly_counts <- as.vector(table(year(sampling_date)))
+    # Find consecutive years with at least 6 samples
+    consecutive_years <- rle(yearly_counts >= 6)
+    # Identify the longest series of consecutive years with 6+ samples
+    max_consecutive <- ifelse(length(consecutive_years$lengths[consecutive_years$values]) > 0, 
+                              max(consecutive_years$lengths[consecutive_years$values]), 0)
+    # Keep only if the longest series is at least 6 years
+    max_consecutive >= 6
+  }) %>%
+  ungroup()   %>%
+  select(mvm_id, org_charge_density_meq_g_C, sampling_date) -> data_filtered
+     
+data_filtered %>% 
+  mutate(SiteID = as.factor(mvm_id)) %>% 
+  pivot_longer(cols = c("org_charge_density_meq_g_C")) %>% 
+  screeningmodeling(values = value,
+                    datevar = sampling_date, 
+                    link = "identity", 
+                    conf.type = "conf",
+                    conf.level = 0.95,
+                    beep = FALSE, 
+                    tdist = FALSE,
+                    autocor = TRUE,
+                    mvm_id) ->
+  trendplotdata_selected_OMCD
+
+trendplotdata_selected_OMCD %>% 
+  left_join(coordinates) %>% 
+  saveRDS(., file = "../data/trendplotdata_selected_omcd.rds")
+}  else if (re.read == 're load') {
+  trendplotdata_selected_OMCD <- tryCatch({
+    readRDS(file = "../data/trendplotdata_selected_omcd.rds")
+  }, error = function(e) {
+    message("An error occurred while reading the RDS file: ", e$message)
+    NULL # Return NULL or an alternative value to handle the error gracefully
+  })
+}
+```
+
+```{r}
+#| include: false
+# Trend plot for org_charge_density_meq_g_C
+
+if (re.read != 're fig' & exists("trendplotdata_selected_OMCD")){
+  fig <- trendplotdata_selected_OMCD %>%plot_proportions()+ ggtitle("OMCD") + 
+        theme(text=element_text(size=5), #change font size of all text
+        axis.text=element_text(size=5), #change font size of axis text
+        axis.title=element_text(size=6), #change font size of axis titles
+        plot.title=element_text(size=6.5), #change font size of plot title
+        legend.text=element_text(size=6), #change font size of legend text
+        legend.title=element_text(size=5)) 
+  fig %>% ggsave(file = "figures/omcd_proportion_selected_filtered.png", width = 10,
+  height = 6,
+  units = "cm",
+  dpi = 300) 
+}  
+```
+
+#### Periods
+
 ```{r}
 #| fig.cap: Kruskal Wallis with confidence interval of 95% to find number of stations with significant differences bettwen the periods. 
 #| label: fig-sig-org_charge_density
@@ -3033,8 +3164,83 @@ plot_grid(p2, p1, p3,  labels = c('a. TOC', 'b. sVISa', 'c. OMCD'), ncol = 3, la
   dpi = 300)
 ```
 
----
 
+## Al
+
+#### GAM
+
+
+```{r}
+#| include: false
+
+re.read <- 're read'
+
+if (re.read == 're read'){
+data_12 %>%  
+  filter(!is.na(`Al total (µmol/l)`)) %>% 
+  mutate(sampling_date = as.Date(sampling_date)) %>% 
+  group_by(mvm_id) %>%
+  filter({
+    # Count samples per year
+    yearly_counts <- as.vector(table(year(sampling_date)))
+    # Find consecutive years with at least 6 samples
+    consecutive_years <- rle(yearly_counts >= 6)
+    # Identify the longest series of consecutive years with 6+ samples
+    max_consecutive <- ifelse(length(consecutive_years$lengths[consecutive_years$values]) > 0, 
+                              max(consecutive_years$lengths[consecutive_years$values]), 0)
+    # Keep only if the longest series is at least 6 years
+    max_consecutive >= 6
+  }) %>%
+  ungroup()   %>%
+  select(mvm_id, `Al total (µmol/l)`, sampling_date) -> data_filtered
+     
+data_filtered %>% 
+  mutate(SiteID = as.factor(mvm_id)) %>% 
+  pivot_longer(cols = c("Al total (µmol/l)")) %>% 
+  screeningmodeling(values = value,
+                    datevar = sampling_date, 
+                    link = "identity", 
+                    conf.type = "conf",
+                    conf.level = 0.95,
+                    beep = FALSE, 
+                    tdist = FALSE,
+                    autocor = TRUE,
+                    mvm_id) ->
+  trendplotdata_selected_al
+
+
+
+trendplotdata_selected_al %>% 
+  left_join(coordinates) -> trendplotdata_selected_al
+  
+ trendplotdata_selected_al %>% 
+  saveRDS(., file = "../data/trendplotdata_selected_filtered_al_tot.rds")
+}  
+
+
+```
+
+```{r}
+#| include: false
+# Trend plot for org_charge_density_meq_g_C
+
+if (re.read != 're fig' & exists("trendplotdata_selected_al")){
+  fig <- trendplotdata_selected_al %>%plot_proportions()+ ggtitle("OMCD") + 
+        theme(text=element_text(size=5), #change font size of all text
+        axis.text=element_text(size=5), #change font size of axis text
+        axis.title=element_text(size=6), #change font size of axis titles
+        plot.title=element_text(size=6.5), #change font size of plot title
+        legend.text=element_text(size=6), #change font size of legend text
+        legend.title=element_text(size=5))
+  fig       
+  fig %>% ggsave(file = "figures/al_proportion_selected_filtered.png", width = 10,
+  height = 6,
+  units = "cm",
+  dpi = 300) 
+}  
+```
+
+---
 
 
 # Spatial Patterns
