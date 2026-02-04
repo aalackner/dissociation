@@ -9,3 +9,4 @@ report/*
 !report/index.qmd
 
 *.Identifier
+data/
